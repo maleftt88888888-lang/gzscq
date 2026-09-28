@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>2D 计算机图形学算法交互试验台</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f4f6f9;
+      margin: 0;
+      padding: 30px;
+      color: #333;
+    }
+    h1 { text-align: center; margin-bottom: 30px; font-size: 24px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 25px;
+      max-width: 1300px;
+      margin: 0 auto;
+    }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+      display: flex;
+      flex-direction: column;
+    }
+    .card h2 {
+      font-size: 17px;
+      margin-top: 0;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+      color: #1a73e8;
+    }
+    .canvas-wrap {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #fafafa;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 15px;
+      min-height: 280px;
+    }
+    canvas {
+      background: #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      border-radius: 4px;
+    }
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .control-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 500;
+      color: #555;
+    }
+    input[type="text"], select {
+      padding: 6px 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    input[type="range"] {
+      width: 100%;
+      cursor: pointer;
+    }
+    button {
+      padding: 8px 16px;
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    button:hover { background: #1557b0; }
+  </style>
+</head>
+<body>
+
+  <h1>2D 计算机图形学算法交互试验台</h1>
+
+  <div class="grid">
+    <!-- 算法一：圆弧文字极坐标排布 -->
+    <div class="card">
+      <h2>算法一：极坐标弧形文字排布</h2>
+      <div class="canvas-wrap">
+        <canvas id="cvsArc" width="280" height="280"></canvas>
+      </div>
+      <div class="controls">
+        <div class="control-row">
+          <div class="control-label"><span>排布文本</span></div>
+          <input type="text" id="arcInput" value="POLAR COORDINATE TEXT">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>分布半径 (R)</span><span id="radiusVal">90px</span></div>
+          <input type="range" id="arcRadius" min="40" max="120" value="90">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>跨度角度 (&Delta;&theta;)</span><span id="sweepVal">160&deg;</span></div>
+          <input type="range" id="arcSweep" min="30" max="360" value="160">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>起始偏角 (&theta;0)</span><span id="startVal">-170&deg;</span></div>
+          <input type="range" id="arcStart" min="-180" max="180" value="-170">
+        </div>
+      </div>
+    </div>
+
+    <!-- 算法二：多角星顶点几何学 -->
+    <div class="card">
+      <h2>算法二：多角星几何顶点递推</h2>
+      <div class="canvas-wrap">
+        <canvas id="cvsStar" width="280" height="280"></canvas>
+      </div>
+      <div class="controls">
+        <div class="control-row">
+          <div class="control-label"><span>顶点角数 (Points)</span><span id="pointsVal">5</span></div>
+          <input type="range" id="starPoints" min="3" max="12" value="5">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>外圆半径 (R_out)</span><span id="routVal">90px</span></div>
+          <input type="range" id="starRout" min="40" max="120" value="90">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>内外径比 (R_in / R_out)</span><span id="ratioVal">0.38</span></div>
+          <input type="range" id="starRatio" min="0.1" max="0.9" step="0.02" value="0.38">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>旋转角度</span><span id="starRotVal">0&deg;</span></div>
+          <input type="range" id="starRot" min="0" max="360" value="0">
+        </div>
+      </div>
+    </div>
+
+    <!-- 算法三：像素级噪点与磨损侵蚀 -->
+    <div class="card">
+      <h2>算法三：像素噪点与磨损侵蚀</h2>
+      <div class="canvas-wrap">
+        <canvas id="cvsNoise" width="280" height="280"></canvas>
+      </div>
+      <div class="controls">
+        <div class="control-row">
+          <div class="control-label"><span>基础测试图案</span></div>
+          <select id="noiseShape">
+            <option value="circle">粗同心圆环 (Ring)</option>
+            <option value="text">高对比度实心字符 (Bold Text)</option>
+            <option value="block">纯色实心几何块 (Solid Block)</option>
+          </select>
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>像素脱墨/镂空率</span><span id="noiseRateVal">15%</span></div>
+          <input type="range" id="noiseRate" min="0" max="50" value="15">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>边缘羽化/弱化强度</span><span id="fadeRateVal">30%</span></div>
+          <input type="range" id="fadeRate" min="0" max="80" value="30">
+        </div>
+        <button onclick="renderNoise()">重新生成随机噪声 (Reseed)</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 算法一：极坐标文字排布
+    // ==========================================
+    const cvsArc = document.getElementById('cvsArc');
+    const ctxArc = cvsArc.getContext('2d');
+
+    function renderArc() {
+      const text = document.getElementById('arcInput').value || '';
+      const radius = parseInt(document.getElementById('arcRadius').value, 10);
+      const sweepDeg = parseInt(document.getElementById('arcSweep').value, 10);
+      const startDeg = parseInt(document.getElementById('arcStart').value, 10);
+
+      document.getElementById('radiusVal').innerText = radius + 'px';
+      document.getElementById('sweepVal').innerText = sweepDeg + '°';
+      document.getElementById('startVal').innerText = startDeg + '°';
+
+      const cx = cvsArc.width / 2;
+      const cy = cvsArc.height / 2;
+
+      ctxArc.clearRect(0, 0, cvsArc.width, cvsArc.height);
+
+      // 绘制辅助基准线（虚线圆弧）
+      const startAngle = (startDeg * Math.PI) / 180;
+      const totalAngle = (sweepDeg * Math.PI) / 180;
+      ctxArc.save();
+      ctxArc.strokeStyle = '#e0e0e0';
+      ctxArc.setLineDash([4, 4]);
+      ctxArc.beginPath();
+      ctxArc.arc(cx, cy, radius, startAngle, startAngle + totalAngle);
+      ctxArc.stroke();
+      ctxArc.restore();
+
+      // 核心算法：遍历文字，根据极坐标变换计算位置与切线旋转
+      const n = text.length;
+      if (n === 0) return;
+      const angleStep = n > 1 ? totalAngle / (n - 1) : 0;
+
+      ctxArc.save();
+      ctxArc.font = 'bold 15px sans-serif';
+      ctxArc.fillStyle = '#2c3e50';
+      ctxArc.textAlign = 'center';
+      ctxArc.textBaseline = 'middle';
+
+      for (let i = 0; i < n; i++) {
+        const theta = startAngle + i * angleStep;
+        // 极坐标转直角坐标
+        const x = cx + radius * Math.cos(theta);
+        const y = cy + radius * Math.sin(theta);
+
+        ctxArc.save();
+        ctxArc.translate(x, y);
+        // 切线正交旋转角度
+        ctxArc.rotate(theta + Math.PI / 2);
+        ctxArc.fillText(text[i], 0, 0);
+        ctxArc.restore();
+      }
+      ctxArc.restore();
+    }
+
+    // ==========================================
+    // 算法二：多角星几何生成
+    // ==========================================
+    const cvsStar = document.getElementById('cvsStar');
+    const ctxStar = cvsStar.getContext('2d');
+
+    function renderStar() {
+      const points = parseInt(document.getElementById('starPoints').value, 10);
+      const rOut = parseInt(document.getElementById('starRout').value, 10);
+      const ratio = parseFloat(document.getElementById('starRatio').value);
+      const rotDeg = parseInt(document.getElementById('starRot').value, 10);
+      const rIn = rOut * ratio;
+
+      document.getElementById('pointsVal').innerText = points;
+      document.getElementById('routVal').innerText = rOut + 'px';
+      document.getElementById('ratioVal').innerText = ratio.toFixed(2);
+      document.getElementById('starRotVal').innerText = rotDeg + '°';
+
+      const cx = cvsStar.width / 2;
+      const cy = cvsStar.height / 2;
+
+      ctxStar.clearRect(0, 0, cvsStar.width, cvsStar.height);
+
+      // 绘制辅助同心内外圆
+      ctxStar.save();
+      ctxStar.strokeStyle = '#eee';
+      ctxStar.setLineDash([3, 3]);
+      ctxStar.beginPath();
+      ctxStar.arc(cx, cy, rOut, 0, Math.PI * 2);
+      ctxStar.stroke();
+      ctxStar.beginPath();
+      ctxStar.arc(cx, cy, rIn, 0, Math.PI * 2);
+      ctxStar.stroke();
+      ctxStar.restore();
+
+      // 核心算法：交替内外交接点递推
+      const step = Math.PI / points;
+      const baseRot = (rotDeg * Math.PI) / 180 - Math.PI / 2;
+
+      ctxStar.save();
+      ctxStar.fillStyle = '#e67e22';
+      ctxStar.strokeStyle = '#d35400';
+      ctxStar.lineWidth = 2;
+      ctxStar.beginPath();
+
+      for (let i = 0; i < 2 * points; i++) {
+        const r = (i % 2 === 0) ? rOut : rIn;
+        const angle = baseRot + i * step;
+        const x = cx + r * Math.cos(angle);
+        const y = cy + r * Math.sin(angle);
+        if (i === 0) ctxStar.moveTo(x, y);
+        else ctxStar.lineTo(x, y);
+      }
+      ctxStar.closePath();
+      ctxStar.fill();
+      ctxStar.stroke();
+      ctxStar.restore();
+    }
+
+    // ==========================================
+    // 算法三：像素级噪点与磨损侵蚀
+    // ==========================================
+    const cvsNoise = document.getElementById('cvsNoise');
+    const ctxNoise = cvsNoise.getContext('2d');
+
+    function renderNoise() {
+      const shape = document.getElementById('noiseShape').value;
+      const noiseRate = parseInt(document.getElementById('noiseRate').value, 10) / 100;
+      const fadeRate = parseInt(document.getElementById('fadeRate').value, 10) / 100;
+
+      document.getElementById('noiseRateVal').innerText = Math.round(noiseRate * 100) + '%';
+      document.getElementById('fadeRateVal').innerText = Math.round(fadeRate * 100) + '%';
+
+      const w = cvsNoise.width;
+      const h = cvsNoise.height;
+      const cx = w / 2;
+      const cy = h / 2;
+
+      ctxNoise.clearRect(0, 0, w, h);
+
+      // 1. 先绘制基础无噪点清晰图形
+      ctxNoise.save();
+      ctxNoise.fillStyle = '#c0392b';
+      ctxNoise.strokeStyle = '#c0392b';
+
+      if (shape === 'circle') {
+        ctxNoise.lineWidth = 14;
+        ctxNoise.beginPath();
+        ctxNoise.arc(cx, cy, 75, 0, Math.PI * 2);
+        ctxNoise.stroke();
+      } else if (shape === 'text') {
+        ctxNoise.font = '900 52px sans-serif';
+        ctxNoise.textAlign = 'center';
+        ctxNoise.textBaseline = 'middle';
+        ctxNoise.fillText('SAMPLE', cx, cy);
+      } else if (shape === 'block') {
+        ctxNoise.fillRect(cx - 70, cy - 70, 140, 140);
+      }
+      ctxNoise.restore();
+
+      // 2. 提取 ImageData 像素数组做随机侵蚀处理
+      const imgData = ctxNoise.getImageData(0, 0, w, h);
+      const data = imgData.data;
+
+      for (let i = 0; i < data.length; i += 4) {
+        // 只对已有颜色的不透明/半透明像素施加噪声
+        if (data[i + 3] > 0) {
+          const rand = Math.random();
+          if (rand < noiseRate) {
+            // 像素完全剔除（模拟中空脱墨）
+            data[i + 3] = 0;
+          } else if (rand < noiseRate + fadeRate) {
+            // 随机弱化透明度（模拟压印受力不均）
+            data[i + 3] = Math.floor(data[i + 3] * (0.2 + 0.8 * Math.random()));
+          }
+        }
+      }
+
+      ctxNoise.putImageData(imgData, 0, 0);
+    }
+
+    // 绑定事件监听
+    document.querySelectorAll('#arcInput, #arcRadius, #arcSweep, #arcStart').forEach(el => {
+      el.addEventListener('input', renderArc);
+    });
+    document.querySelectorAll('#starPoints, #starRout, #starRatio, #starRot').forEach(el => {
+      el.addEventListener('input', renderStar);
+    });
+    document.querySelectorAll('#noiseShape, #noiseRate, #fadeRate').forEach(el => {
+      el.addEventListener('input', renderNoise);
+    });
+
+    // 初始渲染
+    renderArc();
+    renderStar();
+    renderNoise();
+  </script>
+</body>
+</html>

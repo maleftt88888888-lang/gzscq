@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>多格式文档（PDF/Word/图片）水印、图章与手写签名综合工作台</title>
+  <!-- 离线本地化解析库（优先加载打包在 exe 本地的独立库，失败时自动平滑回退至公共 CDN） -->
+  <script src="pdf.min.js"></script>
+  <script>
+    if (!window.pdfjsLib) {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"><\/script>');
+    }
+  </script>
+  <script src="mammoth.browser.min.js"></script>
+  <script>
+    if (!window.mammoth) {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"><\/script>');
+    }
+  </script>
+  <style>
+    :root {
+      --bg-color: #f0f2f5;
+      --panel-bg: #ffffff;
+      --text-main: #333333;
+      --text-sub: #666666;
+      --border-color: #d0d7de;
+      --primary: #1a73e8;
+      --primary-hover: #1557b0;
+      --viewer-bg: #525659;
+      --input-bg: #ffffff;
+      --badge-bg: #e8f0fe;
+    }
+
+    [data-theme="dark"] {
+      --bg-color: #18191c;
+      --panel-bg: #242529;
+      --text-main: #e4e6eb;
+      --text-sub: #a0a3bd;
+      --border-color: #3e4049;
+      --primary: #478beb;
+      --primary-hover: #3b7ad6;
+      --viewer-bg: #121316;
+      --input-bg: #2c2d33;
+      --badge-bg: #283344;
+    }
+
+    * { box-sizing: border-box; transition: background-color 0.2s, color 0.2s, border-color 0.2s; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      gap: 16px;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: 440px;
+      background: var(--panel-bg);
+      padding: 18px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .header-bar h2 { font-size: 16px; margin: 0; color: var(--primary); }
+
+    /* 深浅色切换按钮 */
+    .theme-toggle-btn {
+      background: var(--input-bg);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 4px 10px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .theme-toggle-btn:hover { border-color: var(--primary); }
+
+    /* 选项卡样式 */
+    .tabs { display: flex; border-bottom: 2px solid var(--border-color); margin-bottom: 12px; }
+    .tab-btn {
+      flex: 1;
+      padding: 8px 4px;
+      background: none;
+      border: none;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-sub);
+      cursor: pointer;
+      text-align: center;
+    }
+    .tab-btn.active { color: var(--primary); border-bottom: 2px solid var(--primary); margin-bottom: -2px; }
+    .tab-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 6px; }
+
+    .control-row { display: flex; flex-direction: column; gap: 4px; }
+    .control-label { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text-sub); }
+    input[type="text"], input[type="color"], select {
+      padding: 6px 8px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      font-size: 13px;
+      background: var(--input-bg);
+      color: var(--text-main);
+    }
+    input[type="range"] { width: 100%; cursor: pointer; }
+    .radio-group { display: flex; gap: 16px; font-size: 12px; padding: 4px 0; }
+    .radio-group label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+
+    .btn-group { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-color); }
+    button.action-btn {
+      padding: 9px;
+      border: none;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-success { background: #34a853; color: #fff; }
+    .btn-success:hover { background: #2b8a43; }
+
+    .main-view {
+      flex: 1;
+      background: var(--viewer-bg);
+      border-radius: 8px;
+      overflow: auto;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 24px;
+      position: relative;
+    }
+    #renderCanvas {
+      background: #fff;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+      cursor: crosshair;
+    }
+    .info-badge {
+      background: var(--badge-bg);
+      border-left: 3px solid var(--primary);
+      padding: 6px 10px;
+      font-size: 11px;
+      color: var(--text-main);
+      border-radius: 0 4px 4px 0;
+      line-height: 1.4;
+    }
+    .sub-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--primary);
+      text-transform: uppercase;
+      margin-top: 6px;
+      border-bottom: 1px dashed var(--border-color);
+      padding-bottom: 3px;
+    }
+
+    /* 手写板区域 */
+    .pad-container {
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--input-bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px;
+    }
+    #sigPadCanvas {
+      background: #fff;
+      border: 1px dashed var(--border-color);
+      border-radius: 4px;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    /* 声明与作者联系方式栏 */
+    .disclaimer-box {
+      margin-top: 10px;
+      padding: 8px 10px;
+      background: rgba(229, 57, 53, 0.08);
+      border-left: 3px solid #e53935;
+      border-radius: 0 4px 4px 0;
+      font-size: 11px;
+      color: var(--text-sub);
+      line-height: 1.5;
+    }
+    .contact-box {
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: var(--badge-bg);
+      border-radius: 4px;
+      font-size: 11px;
+      color: var(--text-main);
+    }
+    .copy-chip-btn {
+      padding: 3px 8px;
+      border: 1px solid var(--primary);
+      background: transparent;
+      color: var(--primary);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: 0.2s;
+    }
+    .copy-chip-btn:hover {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    /* 移动端与小屏响应式适配 */
+    @media (max-width: 900px) {
+      body {
+        flex-direction: column;
+        height: auto;
+        min-height: 100vh;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 8px;
+        gap: 12px;
+      }
+      .sidebar {
+        width: 100%;
+        height: auto;
+        max-height: none;
+        padding: 14px 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      }
+      .tab-content {
+        max-height: 480px;
+      }
+      .main-view {
+        width: 100%;
+        min-height: 520px;
+        padding: 12px 8px;
+        border-radius: 6px;
+      }
+      #renderCanvas {
+        max-width: 100%;
+        height: auto;
+        touch-action: pan-x pan-y;
+      }
+      .pad-container {
+        width: 100%;
+      }
+      #sigPadCanvas {
+        width: 100%;
+        max-width: 380px;
+        height: auto;
+        aspect-ratio: 380 / 150;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 控制侧边栏 -->
+  <div class="sidebar">
+    <div class="header-bar">
+      <h2>文档审批与签批工作台 <span style="font-size:10px; padding:2px 6px; background:var(--primary); color:#fff; border-radius:10px; vertical-align:middle; font-weight:600;">v1.0.0</span></h2>
+      <button class="theme-toggle-btn" onclick="toggleTheme()" id="themeBtn">🌙 深色模式</button>
+    </div>
+
+    <!-- 标签切换 -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('docTab')">1. 文档底图与融合</button>
+      <button class="tab-btn" onclick="switchTab('stampTab')">2. 审批图章定制</button>
+      <button class="tab-btn" onclick="switchTab('sigTab')">3. 手写签名板</button>
+    </div>
+
+    <!-- 标签页 1：文档载入与盖章融合 -->
+    <div id="docTab" class="tab-content">
+      <div class="info-badge">
+        支持 <b>PDF (.pdf)</b>、<b>Word (.docx)</b> 或 <b>图片 (.png/.jpg)</b>。主画面的<b>图章</b>和<b>手写签名</b>均可随时点选鼠标拖拽。
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>选择本地文件</span></div>
+        <input type="file" id="docFileInput" accept=".pdf, .docx, image/*">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>快捷重置与归位</span></div>
+        <div style="display:flex; gap:8px;">
+          <button class="action-btn" style="flex:1; background:var(--input-bg); color:var(--text-main); border:1px solid var(--border-color); font-size:12px;" onclick="resetDefaultDoc()">恢复默认单据</button>
+          <button class="action-btn" style="flex:1; background:var(--input-bg); color:var(--text-main); border:1px solid var(--border-color); font-size:12px;" onclick="resetPositions()">图章/签名一键归位</button>
+        </div>
+      </div>
+
+      <div class="control-row" id="pageSelectRow" style="display:none;">
+        <div class="control-label"><span>PDF 页码切换</span><span id="pageInfo">第 1 / 1 页</span></div>
+        <div style="display:flex; gap:8px;">
+          <button class="action-btn" style="flex:1; background:var(--input-bg); color:var(--text-main); border:1px solid var(--border-color);" onclick="changePdfPage(-1)">上一页</button>
+          <button class="action-btn" style="flex:1; background:var(--input-bg); color:var(--text-main); border:1px solid var(--border-color);" onclick="changePdfPage(1)">下一页</button>
+        </div>
+      </div>
+
+      <div class="sub-section-title">图像与图章融合控制</div>
+
+      <div class="control-row">
+        <div class="control-label"><span>色彩融合模式 (Blend Mode)</span></div>
+        <select id="blendMode">
+          <option value="multiply" selected>正片叠底 (Multiply - 模拟真实透印黑字)</option>
+          <option value="source-over">正常覆盖 (Normal - 不融合遮盖)</option>
+          <option value="color-burn">颜色加深 (Color Burn - 深层油墨结合)</option>
+          <option value="darken">暗部优先 (Darken - 取底字暗色)</option>
+        </select>
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>印泥渗透度 (透明融合)</span><span id="stampOpacityVal">0.85</span></div>
+        <input type="range" id="stampOpacity" min="0.2" max="1" step="0.05" value="0.85">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>纸张底墨融合强度</span><span id="bleedIntensityVal">70%</span></div>
+        <input type="range" id="bleedIntensity" min="0" max="100" value="70">
+      </div>
+
+      <div class="sub-section-title">形态与空间定位</div>
+
+      <div class="control-row">
+        <div class="control-label"><span>图章整体缩放</span><span id="stampScaleVal">100%</span></div>
+        <input type="range" id="stampScale" min="30" max="200" value="100">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>图章倾斜角度</span><span id="stampRotVal">-8°</span></div>
+        <input type="range" id="stampRot" min="-45" max="45" value="-8">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>当前选中对象位置</span><span id="targetPosVal">图章 X: 540, Y: 800</span></div>
+      </div>
+    </div>
+
+    <!-- 标签页 2：图章完整流水线配置 -->
+    <div id="stampTab" class="tab-content" style="display:none;">
+      <div class="control-row">
+        <div class="control-label"><span>边框样式开关</span></div>
+        <div class="radio-group">
+          <label><input type="radio" name="borderStyle" value="single" checked> 单圈边框</label>
+          <label><input type="radio" name="borderStyle" value="double"> 双圈边框</label>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>外圈半径基准</span><span id="badgeRadiusVal">118px (约40mm)</span></div>
+        <input type="range" id="badgeRadius" min="60" max="160" value="118">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>外圈线条粗细</span><span id="borderWidthVal">4px</span></div>
+        <input type="range" id="borderWidth" min="1" max="8" value="4">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>弧形文本内容</span></div>
+        <input type="text" id="arcText" value="★ 内部协同流转审核 ★">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>弧形文本字体</span></div>
+        <select id="arcFontFamily">
+          <option value='"SimSun", "NSimSun", "Songti SC", "STSong", serif' selected>简化宋体 (SimSun / 宋体)</option>
+          <option value='"SimHei", "Microsoft YaHei", sans-serif'>黑体 (SimHei / 微软雅黑)</option>
+          <option value='"KaiTi", "STKaiti", serif'>楷体 (KaiTi / 华文楷体)</option>
+          <option value='"FangSong", "STFangsong", serif'>仿宋 (FangSong / 华文仿宋)</option>
+        </select>
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>弧形文字字号 (最小到最大调节)</span><span id="arcFontSizeVal">14px</span></div>
+        <input type="range" id="arcFontSize" min="6" max="96" value="14">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>圆弧跨度角 (散开范围)</span><span id="arcSweepVal">180°</span></div>
+        <input type="range" id="arcSweep" min="10" max="350" value="180">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>顶部文字旋转/偏角 (-180° ~ 180°)</span><span id="arcStartAngleVal">0°</span></div>
+        <input type="range" id="arcStartAngle" min="-180" max="180" value="0">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>中心星形角数</span><span id="starPointsVal">5</span></div>
+        <input type="range" id="starPoints" min="3" max="10" value="5">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>中心星形外径</span><span id="starSizeVal">32px</span></div>
+        <input type="range" id="starSize" min="10" max="70" value="32">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>中心星形 Y 轴偏置</span><span id="starOffsetYVal">-8px</span></div>
+        <input type="range" id="starOffsetY" min="-60" max="60" value="-8">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>底部辅助文本</span></div>
+        <input type="text" id="subText" value="审核通过 • 2026">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>底部文字字号大小</span><span id="subFontSizeVal">12px</span></div>
+        <input type="range" id="subFontSize" min="6" max="60" value="12">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>底部排布半径 (位置)</span><span id="subRadiusVal">82px</span></div>
+        <input type="range" id="subRadius" min="30" max="160" value="82">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>底部文字朝向</span></div>
+        <div class="radio-group">
+          <label><input type="radio" name="subOrientation" value="inward" checked> 字头朝向圆心 (直立向心)</label>
+          <label><input type="radio" name="subOrientation" value="outward"> 字头朝向外沿 (背心环绕)</label>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>底部圆弧跨度角 (散开范围)</span><span id="subSweepVal">110°</span></div>
+        <input type="range" id="subSweep" min="10" max="350" value="110">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>底部文字旋转/偏角 (-180° ~ 180°)</span><span id="subStartAngleVal">0°</span></div>
+        <input type="range" id="subStartAngle" min="-180" max="180" value="0">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>印章颜色</span></div>
+        <input type="color" id="themeColor" value="#b71c1c" style="width: 100%; height: 34px;">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>像素磨损脱墨率</span><span id="noiseRateVal">10%</span></div>
+        <input type="range" id="noiseRate" min="0" max="30" value="10">
+      </div>
+    </div>
+
+    <!-- 标签页 3：手写签名板 -->
+    <div id="sigTab" class="tab-content" style="display:none;">
+      <div class="info-badge">
+        在下方画板用鼠标或触控笔手写签名，签名将作为独立图层放置在文档上。
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>在线手写签名板</span></div>
+        <div class="pad-container">
+          <canvas id="sigPadCanvas" width="380" height="150"></canvas>
+          <div style="display:flex; justify-content:space-between; width:100%; margin-top:8px;">
+            <button class="action-btn" style="background:var(--border-color); color:var(--text-main); font-size:12px;" onclick="clearSignaturePad()">清空重写</button>
+            <button class="action-btn btn-primary" style="font-size:12px;" onclick="applySignatureToDoc()">更新签名到文档</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>笔触粗细</span><span id="penWidthVal">3px</span></div>
+        <input type="range" id="penWidth" min="1" max="18" value="3">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>笔迹颜色</span></div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input type="color" id="penColor" value="#1a1a1a" style="width:48px; height:34px; padding:2px; border-radius:4px; cursor:pointer;" title="自定义笔迹颜色">
+          <div style="display:flex; gap:6px; flex:1;">
+            <button type="button" class="action-btn" onclick="setPenPresetColor('#1a1a1a')" style="flex:1; padding:6px 2px; font-size:12px; background:#1a1a1a; color:#fff; border-radius:4px; border:1px solid #555; cursor:pointer;">碳素黑</button>
+            <button type="button" class="action-btn" onclick="setPenPresetColor('#0d47a1')" style="flex:1; padding:6px 2px; font-size:12px; background:#0d47a1; color:#fff; border-radius:4px; border:1px solid #555; cursor:pointer;">墨水蓝</button>
+            <button type="button" class="action-btn" onclick="setPenPresetColor('#b71c1c')" style="flex:1; padding:6px 2px; font-size:12px; background:#b71c1c; color:#fff; border-radius:4px; border:1px solid #555; cursor:pointer;">朱砂红</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sub-section-title">文档上手写签名参数</div>
+
+      <div class="control-row">
+        <div class="control-label"><span>签名融合模式 (Blend Mode)</span></div>
+        <select id="sigBlendMode">
+          <option value="multiply" selected>正片叠底 (Multiply - 真实压字渗透)</option>
+          <option value="source-over">正常覆盖 (Normal - 无融合)</option>
+          <option value="color-burn">颜色加深 (Color Burn - 深层浸墨)</option>
+          <option value="darken">暗部优先 (Darken - 保留底字)</option>
+        </select>
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>签名笔墨浓淡 (透明融合)</span><span id="sigOpacityVal">0.95</span></div>
+        <input type="range" id="sigOpacity" min="0.2" max="1" step="0.05" value="0.95">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>签名底墨融合强度</span><span id="sigBleedVal">60%</span></div>
+        <input type="range" id="sigBleed" min="0" max="100" value="60">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>签名缩放比例</span><span id="sigScaleVal">100%</span></div>
+        <input type="range" id="sigScale" min="30" max="250" value="100">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>签名倾斜角度</span><span id="sigRotVal">-4°</span></div>
+        <input type="range" id="sigRot" min="-30" max="30" value="-4">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>签名是否启用显示</span></div>
+        <div class="radio-group">
+          <label><input type="radio" name="sigVisible" value="true" checked> 显示在文档中</label>
+          <label><input type="radio" name="sigVisible" value="false"> 隐藏签名</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- 免责声明与作者微信联系栏 -->
+    <div class="disclaimer-box">
+      <b>⚠️ 免责声明</b>：本工具仅供合法内部办公审批排版、技术测试与学习交流使用。<b>请勿用于任何伪造印章、合同造假等非法用途</b>，因违规使用产生的一切法律后果与责任均与作者无关。
+    </div>
+
+    <div class="contact-box">
+      <span>微信支持：<b>可乐加糖</b></span>
+      <button class="copy-chip-btn" id="copyBtn" onclick="copyWechatCode()">复制微信号</button>
+    </div>
+
+    <!-- 底部操作按钮 -->
+    <div class="btn-group">
+      <button class="action-btn btn-success" onclick="exportDocument()">导出当前完整签批文档 (PNG)</button>
+      <button class="action-btn btn-primary" onclick="resetDefaultDoc()">加载默认示例文档</button>
+    </div>
+  </div>
+
+  <!-- 主视图工作区 -->
+  <div class="main-view">
+    <canvas id="renderCanvas" width="800" height="1130"></canvas>
+  </div>
+
+  <script>
+    // 配置 PDF.js Worker 路径
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    const canvas = document.getElementById('renderCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // 底图与多页文档控制
+    let currentDocImage = null;
+    let pdfDoc = null;
+    let currentPdfPage = 1;
+    let totalPdfPages = 1;
+
+    // 图层一：图章位置与状态
+    let stampPos = {
+      x: 540,
+      y: 800,
+      radius: 65,
+      isDragging: false,
+      dragOffsetX: 0,
+      dragOffsetY: 0
+    };
+
+    // 图层二：手写签名位置与状态
+    let sigPos = {
+      x: 320,
+      y: 810,
+      width: 140,
+      height: 60,
+      scale: 1.0,
+      rot: -4,
+      visible: true,
+      isDragging: false,
+      dragOffsetX: 0,
+      dragOffsetY: 0
+    };
+
+    // 当前选中的活动图层 ('stamp' 或 'sig')
+    let activeLayer = 'stamp';
+
+    // ==========================================
+    // 深浅色主题切换
+    // ==========================================
+    function toggleTheme() {
+      const currentTheme = document.documentElement.getAttribute('data-theme');
+      const targetTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', targetTheme);
+      document.getElementById('themeBtn').innerText = targetTheme === 'dark' ? '☀️ 浅色模式' : '🌙 深色模式';
+      localStorage.setItem('theme_pref', targetTheme);
+    }
+
+    // 初始化读取本地主题偏好
+    const savedTheme = localStorage.getItem('theme_pref') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️ 浅色模式' : '🌙 深色模式';
+
+    // 复制微信内容功能
+    function copyWechatCode() {
+      const textToCopy = "LLME-love";
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        const btn = document.getElementById('copyBtn');
+        const orig = btn.innerText;
+        btn.innerText = "已复制: " + textToCopy;
+        btn.style.background = "#34a853";
+        btn.style.borderColor = "#34a853";
+        btn.style.color = "#fff";
+        setTimeout(() => {
+          btn.innerText = orig;
+          btn.style.background = "transparent";
+          btn.style.borderColor = "var(--primary)";
+          btn.style.color = "var(--primary)";
+        }, 2000);
+      }).catch(err => {
+        alert("复制失败，微信号为：" + textToCopy);
+      });
+    }
+
+    // 选项卡切换
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+      if (tabId === 'docTab') {
+        document.querySelectorAll('.tab-btn')[0].classList.add('active');
+        document.getElementById('docTab').style.display = 'flex';
+      } else if (tabId === 'stampTab') {
+        document.querySelectorAll('.tab-btn')[1].classList.add('active');
+        document.getElementById('stampTab').style.display = 'flex';
+      } else {
+        document.querySelectorAll('.tab-btn')[2].classList.add('active');
+        document.getElementById('sigTab').style.display = 'flex';
+      }
+    }
+
+    // ==========================================
+    // 手写板（Signature Pad）绘制逻辑与矢量数据模型
+    // ==========================================
+    const sigCanvas = document.getElementById('sigPadCanvas');
+    const sigCtx = sigCanvas.getContext('2d');
+    let isDrawingSig = false;
+    let sigHasStrokes = false;
+    let isDemoSignature = true;
+    let sigStrokes = []; // 存储所有笔画轨迹：[ [ {x, y}, ... ], ... ]
+    let currentStroke = [];
+    let cachedSigCanvas = null;
+
+    function initSigPad() {
+      sigCtx.lineCap = 'round';
+      sigCtx.lineJoin = 'round';
+    }
+
+    function setPenPresetColor(color) {
+      document.getElementById('penColor').value = color;
+      redrawSigCanvas();
+    }
+
+    function getSigCoords(e) {
+      const rect = sigCanvas.getBoundingClientRect();
+      let clientX = e.clientX;
+      let clientY = e.clientY;
+      if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else if (e.changedTouches && e.changedTouches.length > 0) {
+        clientX = e.changedTouches[0].clientX;
+        clientY = e.changedTouches[0].clientY;
+      }
+      const scaleX = sigCanvas.width / (rect.width || 1);
+      const scaleY = sigCanvas.height / (rect.height || 1);
+      return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+      };
+    }
+
+    function redrawSigCanvas() {
+      sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+      const penColor = document.getElementById('penColor').value;
+      const penWidth = parseFloat(document.getElementById('penWidth').value) || 3;
+
+      if (!sigStrokes || sigStrokes.length === 0) {
+        sigHasStrokes = false;
+        cachedSigCanvas = null;
+        renderMain();
+        return;
+      }
+
+      sigHasStrokes = true;
+      sigCtx.save();
+      sigCtx.strokeStyle = penColor;
+      sigCtx.fillStyle = penColor;
+      sigCtx.lineWidth = penWidth;
+      sigCtx.lineCap = 'round';
+      sigCtx.lineJoin = 'round';
+
+      for (let s = 0; s < sigStrokes.length; s++) {
+        const pts = sigStrokes[s];
+        if (!pts || pts.length === 0) continue;
+        if (pts.length === 1) {
+          sigCtx.beginPath();
+          sigCtx.arc(pts[0].x, pts[0].y, penWidth / 2, 0, Math.PI * 2);
+          sigCtx.fill();
+        } else {
+          sigCtx.beginPath();
+          sigCtx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length - 1; i++) {
+            const midX = (pts[i].x + pts[i + 1].x) / 2;
+            const midY = (pts[i].y + pts[i + 1].y) / 2;
+            sigCtx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+          }
+          const last = pts[pts.length - 1];
+          sigCtx.lineTo(last.x, last.y);
+          sigCtx.stroke();
+        }
+      }
+      sigCtx.restore();
+
+      applySignatureToDoc();
+    }
+
+    function startSigStroke(e) {
+      if (e.cancelable) e.preventDefault();
+      if (isDemoSignature) {
+        sigStrokes = [];
+        isDemoSignature = false;
+        sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+      }
+      isDrawingSig = true;
+      const pt = getSigCoords(e);
+      currentStroke = [pt];
+
+      const penColor = document.getElementById('penColor').value;
+      const penWidth = parseFloat(document.getElementById('penWidth').value) || 3;
+      sigCtx.save();
+      sigCtx.strokeStyle = penColor;
+      sigCtx.fillStyle = penColor;
+      sigCtx.lineWidth = penWidth;
+      sigCtx.lineCap = 'round';
+      sigCtx.lineJoin = 'round';
+      sigCtx.beginPath();
+      sigCtx.arc(pt.x, pt.y, penWidth / 2, 0, Math.PI * 2);
+      sigCtx.fill();
+      sigCtx.restore();
+    }
+
+    function moveSigStroke(e) {
+      if (!isDrawingSig || currentStroke.length === 0) return;
+      if (e.cancelable) e.preventDefault();
+      const pt = getSigCoords(e);
+      const prevPt = currentStroke[currentStroke.length - 1];
+      currentStroke.push(pt);
+
+      const penColor = document.getElementById('penColor').value;
+      const penWidth = parseFloat(document.getElementById('penWidth').value) || 3;
+      sigCtx.save();
+      sigCtx.strokeStyle = penColor;
+      sigCtx.lineWidth = penWidth;
+      sigCtx.lineCap = 'round';
+      sigCtx.lineJoin = 'round';
+      sigCtx.beginPath();
+      sigCtx.moveTo(prevPt.x, prevPt.y);
+      sigCtx.lineTo(pt.x, pt.y);
+      sigCtx.stroke();
+      sigCtx.restore();
+    }
+
+    function endSigStroke(e) {
+      if (isDrawingSig) {
+        isDrawingSig = false;
+        if (currentStroke.length > 0) {
+          sigStrokes.push(currentStroke);
+          currentStroke = [];
+        }
+        redrawSigCanvas();
+      }
+    }
+
+    sigCanvas.addEventListener('mousedown', startSigStroke);
+    sigCanvas.addEventListener('mousemove', moveSigStroke);
+    window.addEventListener('mouseup', endSigStroke);
+
+    sigCanvas.addEventListener('touchstart', startSigStroke, { passive: false });
+    sigCanvas.addEventListener('touchmove', moveSigStroke, { passive: false });
+    window.addEventListener('touchend', endSigStroke);
+    window.addEventListener('touchcancel', endSigStroke);
+
+    function clearSignaturePad() {
+      sigStrokes = [];
+      isDemoSignature = false;
+      redrawSigCanvas();
+    }
+
+    function applySignatureToDoc() {
+      if (!sigHasStrokes) {
+        cachedSigCanvas = null;
+        renderMain();
+        return;
+      }
+      const w = sigCanvas.width;
+      const h = sigCanvas.height;
+      const imgData = sigCtx.getImageData(0, 0, w, h);
+      const data = imgData.data;
+
+      let minX = w, minY = h, maxX = 0, maxY = 0;
+      let hasPixel = false;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const alpha = data[(y * w + x) * 4 + 3];
+          if (alpha > 20) {
+            hasPixel = true;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      if (!hasPixel) {
+        cachedSigCanvas = null;
+        renderMain();
+        return;
+      }
+
+      minX = Math.max(0, minX - 4);
+      minY = Math.max(0, minY - 4);
+      maxX = Math.min(w, maxX + 4);
+      maxY = Math.min(h, maxY + 4);
+
+      const cropW = Math.max(10, maxX - minX);
+      const cropH = Math.max(10, maxY - minY);
+
+      const off = document.createElement('canvas');
+      off.width = cropW;
+      off.height = cropH;
+      const offCtx = off.getContext('2d');
+      offCtx.drawImage(sigCanvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+
+      cachedSigCanvas = off;
+      sigPos.width = cropW;
+      sigPos.height = cropH;
+      renderMain();
+    }
+
+    function createDemoHandwrittenSignature() {
+      isDemoSignature = true;
+      // 采样逼真的行草签名笔迹矢量点阵
+      sigStrokes = [
+        [
+          {x: 80, y: 100}, {x: 84, y: 70}, {x: 93, y: 44}, {x: 108, y: 42}, {x: 122, y: 52},
+          {x: 133, y: 76}, {x: 140, y: 110}, {x: 146, y: 126}, {x: 153, y: 105}, {x: 160, y: 46},
+          {x: 170, y: 68}, {x: 180, y: 95}, {x: 190, y: 106}, {x: 204, y: 110}, {x: 216, y: 95},
+          {x: 228, y: 81}, {x: 242, y: 82}, {x: 250, y: 85}, {x: 262, y: 88}, {x: 274, y: 90},
+          {x: 284, y: 80}, {x: 294, y: 70}, {x: 304, y: 85}, {x: 312, y: 105}
+        ],
+        [
+          {x: 110, y: 120}, {x: 140, y: 126}, {x: 175, y: 132}, {x: 215, y: 134},
+          {x: 255, y: 130}, {x: 290, y: 122}, {x: 320, y: 110}
+        ]
+      ];
+      redrawSigCanvas();
+    }
+
+    // ==========================================
+    // 算法模块（复用自 composite_badge_designer）
+    // ==========================================
+    function drawArcText(targetCtx, text, x0, y0, radius, startAngle, sweepAngle, fontSize, fontFamily) {
+      const n = text.length;
+      if (n === 0) return;
+      const step = n > 1 ? sweepAngle / (n - 1) : 0;
+
+      targetCtx.save();
+      const font = fontFamily || '"SimSun", "NSimSun", "Songti SC", "STSong", serif';
+      targetCtx.font = `bold ${fontSize}px ${font}`;
+      targetCtx.textAlign = 'center';
+      targetCtx.textBaseline = 'middle';
+
+      for (let i = 0; i < n; i++) {
+        const theta = startAngle + i * step;
+        const x = x0 + radius * Math.cos(theta);
+        const y = y0 + radius * Math.sin(theta);
+        targetCtx.save();
+        targetCtx.translate(x, y);
+        targetCtx.rotate(theta + Math.PI / 2);
+        targetCtx.fillText(text[i], 0, 0);
+        targetCtx.restore();
+      }
+      targetCtx.restore();
+    }
+
+    function drawStar(targetCtx, x0, y0, points, rOut, rIn) {
+      const step = Math.PI / points;
+      targetCtx.beginPath();
+      for (let i = 0; i < 2 * points; i++) {
+        const r = (i % 2 === 0) ? rOut : rIn;
+        const angle = i * step - Math.PI / 2;
+        const x = x0 + r * Math.cos(angle);
+        const y = y0 + r * Math.sin(angle);
+        if (i === 0) targetCtx.moveTo(x, y);
+        else targetCtx.lineTo(x, y);
+      }
+      targetCtx.closePath();
+      targetCtx.fill();
+    }
+
+    function drawBottomArcText(targetCtx, text, x0, y0, radius, sweepAngle, fontSize, orientation = 'inward', offsetAngle = 0) {
+      const n = text.length;
+      if (n === 0) return;
+      const step = n > 1 ? sweepAngle / (n - 1) : 0;
+
+      targetCtx.save();
+      // 数字和西文优先使用规范字体，确保数字宽度匀称自然
+      targetCtx.font = `bold ${fontSize}px "Arial", "Segoe UI", "SimHei", "Microsoft YaHei", sans-serif`;
+      targetCtx.textAlign = 'center';
+      targetCtx.textBaseline = 'middle';
+
+      for (let i = 0; i < n; i++) {
+        // 从左向右顺时针分布在下半圆弧上，叠加自定义偏角 offsetAngle
+        const theta = Math.PI / 2 + sweepAngle / 2 - i * step + offsetAngle;
+        const x = x0 + radius * Math.cos(theta);
+        const y = y0 + radius * Math.sin(theta);
+        // 核心法线/切线正交角修正：
+        // inward (直立向心，字头朝向圆心)：rot = theta - PI/2
+        // outward (背心环绕，字头朝向外圈)：rot = theta + PI/2
+        const rot = orientation === 'inward' ? (theta - Math.PI / 2) : (theta + Math.PI / 2);
+
+        targetCtx.save();
+        targetCtx.translate(x, y);
+        targetCtx.rotate(rot);
+        targetCtx.fillText(text[i], 0, 0);
+        targetCtx.restore();
+      }
+      targetCtx.restore();
+    }
+
+    function renderOffscreenStamp() {
+      const badgeRadius = parseInt(document.getElementById('badgeRadius').value, 10);
+      const borderWidth = parseInt(document.getElementById('borderWidth').value, 10);
+      const borderStyle = document.querySelector('input[name="borderStyle"]:checked').value;
+      const arcText = document.getElementById('arcText').value.trim();
+      const arcFontEl = document.getElementById('arcFontFamily');
+      const arcFontFamily = arcFontEl ? arcFontEl.value : '';
+      const arcFontSize = parseInt(document.getElementById('arcFontSize').value, 10);
+      const arcSweep = parseInt(document.getElementById('arcSweep').value, 10);
+      const arcStartAngle = parseInt(document.getElementById('arcStartAngle').value, 10);
+      const starPoints = parseInt(document.getElementById('starPoints').value, 10);
+      const starSize = parseInt(document.getElementById('starSize').value, 10);
+      const starOffsetY = parseInt(document.getElementById('starOffsetY').value, 10);
+      const subText = document.getElementById('subText').value.trim();
+      const subFontSize = parseInt(document.getElementById('subFontSize').value, 10);
+      const subRadius = parseInt(document.getElementById('subRadius').value, 10);
+      const subSweep = parseInt(document.getElementById('subSweep').value, 10);
+      const subStartAngle = parseInt(document.getElementById('subStartAngle').value, 10);
+      const subOrientation = (document.querySelector('input[name="subOrientation"]:checked') || {}).value || 'inward';
+      const themeColor = document.getElementById('themeColor').value;
+      const noiseRate = parseInt(document.getElementById('noiseRate').value, 10) / 100;
+
+      const padding = Math.max(35, arcFontSize + 20, subFontSize + 20, borderWidth * 2);
+      const size = (badgeRadius + padding) * 2;
+      const oc = document.createElement('canvas');
+      oc.width = size;
+      oc.height = size;
+      const octx = oc.getContext('2d');
+      const ocx = size / 2;
+      const ocy = size / 2;
+
+      octx.fillStyle = themeColor;
+      octx.strokeStyle = themeColor;
+
+      // 边框绘制
+      octx.lineWidth = borderWidth;
+      octx.beginPath();
+      octx.arc(ocx, ocy, badgeRadius, 0, Math.PI * 2);
+      octx.stroke();
+
+      if (borderStyle === 'double') {
+        octx.lineWidth = Math.max(borderWidth * 0.4, 1);
+        octx.beginPath();
+        octx.arc(ocx, ocy, Math.max(badgeRadius - 8, 10), 0, Math.PI * 2);
+        octx.stroke();
+      }
+
+      // 顶部弧形文字（叠加 arcStartAngle 偏角，采用简化宋体等指定字体）
+      if (arcText.length > 0) {
+        const sweepRad = (arcSweep * Math.PI) / 180;
+        const offsetRad = (arcStartAngle * Math.PI) / 180;
+        const startRad = -Math.PI / 2 - sweepRad / 2 + offsetRad;
+        drawArcText(octx, arcText, ocx, ocy, badgeRadius * 0.75, startRad, sweepRad, arcFontSize, arcFontFamily);
+      }
+
+      // 星形
+      if (starSize > 0) {
+        drawStar(octx, ocx, ocy + starOffsetY, starPoints, starSize, starSize * 0.382);
+      }
+
+      // 底部弧形辅助文字（支持自定义位置半径、弧度跨度、字号、朝向、起始偏角）
+      if (subText.length > 0) {
+        const subSweepRad = (subSweep * Math.PI) / 180;
+        const subOffsetRad = (subStartAngle * Math.PI) / 180;
+        drawBottomArcText(octx, subText, ocx, ocy, subRadius, subSweepRad, subFontSize, subOrientation, subOffsetRad);
+      }
+
+      // 像素磨损侵蚀
+      if (noiseRate > 0) {
+        const imgData = octx.getImageData(0, 0, size, size);
+        const d = imgData.data;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] > 0) {
+            const r = Math.random();
+            if (r < noiseRate) d[i + 3] = 0;
+            else if (r < noiseRate * 2.5) d[i + 3] = Math.floor(d[i + 3] * (0.3 + 0.7 * Math.random()));
+          }
+        }
+        octx.putImageData(imgData, 0, 0);
+      }
+
+      // 实时同步更新标签显示
+      if (document.getElementById('badgeRadiusVal')) {
+        document.getElementById('badgeRadiusVal').innerText = `${badgeRadius}px (约${Math.round(badgeRadius * 0.34)}mm)`;
+        document.getElementById('borderWidthVal').innerText = `${borderWidth}px`;
+        document.getElementById('arcFontSizeVal').innerText = `${arcFontSize}px`;
+        document.getElementById('arcSweepVal').innerText = `${arcSweep}°`;
+        document.getElementById('arcStartAngleVal').innerText = `${arcStartAngle}°`;
+        document.getElementById('starPointsVal').innerText = starPoints;
+        document.getElementById('starSizeVal').innerText = `${starSize}px`;
+        document.getElementById('starOffsetYVal').innerText = `${starOffsetY}px`;
+        document.getElementById('subFontSizeVal').innerText = `${subFontSize}px`;
+        document.getElementById('subRadiusVal').innerText = `${subRadius}px`;
+        document.getElementById('subSweepVal').innerText = `${subSweep}°`;
+        document.getElementById('subStartAngleVal').innerText = `${subStartAngle}°`;
+        document.getElementById('noiseRateVal').innerText = `${Math.round(noiseRate * 100)}%`;
+      }
+
+      return { canvas: oc, radius: badgeRadius };
+    }
+
+    // ==========================================
+    // 主视图合成渲染（支持图章 + 手写双图层）
+    // ==========================================
+    let cachedStamp = null;
+    function updateStampCache() {
+      cachedStamp = renderOffscreenStamp();
+    }
+
+    function renderMain(isExporting = false) {
+      const cleanExport = isExporting === true;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 1. 绘制底图文档
+      if (currentDocImage) {
+        ctx.drawImage(currentDocImage, 0, 0, canvas.width, canvas.height);
+      }
+
+      const blendMode = document.getElementById('blendMode').value;
+      const opacity = parseFloat(document.getElementById('stampOpacity').value);
+      const bleed = parseInt(document.getElementById('bleedIntensity').value, 10) / 100;
+      const effectiveAlpha = Math.max(0.1, opacity * (0.6 + 0.4 * (1 - bleed * 0.3)));
+
+      // 2. 绘制盖印印章
+      if (!cachedStamp) updateStampCache();
+
+      const scale = parseInt(document.getElementById('stampScale').value, 10) / 100;
+      const rot = parseInt(document.getElementById('stampRot').value, 10);
+
+      document.getElementById('stampScaleVal').innerText = Math.round(scale * 100) + '%';
+      document.getElementById('stampRotVal').innerText = rot + '°';
+      document.getElementById('stampOpacityVal').innerText = opacity;
+      document.getElementById('bleedIntensityVal').innerText = Math.round(bleed * 100) + '%';
+
+      ctx.save();
+      ctx.translate(stampPos.x, stampPos.y);
+      ctx.rotate((rot * Math.PI) / 180);
+      ctx.globalAlpha = effectiveAlpha;
+      ctx.globalCompositeOperation = blendMode;
+
+      const drawSize = cachedStamp.canvas.width * scale;
+      ctx.drawImage(cachedStamp.canvas, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1.0;
+
+      // 图章拖拽框高亮（仅在屏幕交互模式绘制，导出图片时自动隐藏）
+      if (!cleanExport && (stampPos.isDragging || activeLayer === 'stamp')) {
+        ctx.strokeStyle = activeLayer === 'stamp' ? '#1a73e8' : '#aaa';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(-drawSize / 2 - 4, -drawSize / 2 - 4, drawSize + 8, drawSize + 8);
+      }
+      ctx.restore();
+
+      // 3. 绘制手写签名图层
+      const sigVisible = document.querySelector('input[name="sigVisible"]:checked').value === 'true';
+      if (sigVisible && cachedSigCanvas) {
+        const sigScale = parseInt(document.getElementById('sigScale').value, 10) / 100;
+        const sigRot = parseInt(document.getElementById('sigRot').value, 10);
+        document.getElementById('sigScaleVal').innerText = Math.round(sigScale * 100) + '%';
+        document.getElementById('sigRotVal').innerText = sigRot + '°';
+
+        const sigBlendMode = document.getElementById('sigBlendMode').value;
+        const sigOpacity = parseFloat(document.getElementById('sigOpacity').value);
+        const sigBleed = parseInt(document.getElementById('sigBleed').value, 10) / 100;
+        const effectiveSigAlpha = Math.max(0.1, sigOpacity * (0.7 + 0.3 * (1 - sigBleed * 0.4)));
+
+        document.getElementById('sigOpacityVal').innerText = sigOpacity;
+        document.getElementById('sigBleedVal').innerText = Math.round(sigBleed * 100) + '%';
+
+        ctx.save();
+        ctx.translate(sigPos.x, sigPos.y);
+        ctx.rotate((sigRot * Math.PI) / 180);
+        ctx.globalAlpha = effectiveSigAlpha;
+        ctx.globalCompositeOperation = sigBlendMode;
+
+        const sw = cachedSigCanvas.width * sigScale;
+        const sh = cachedSigCanvas.height * sigScale;
+        ctx.drawImage(cachedSigCanvas, -sw / 2, -sh / 2, sw, sh);
+
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1.0;
+
+        // 签名拖拽框高亮（仅在屏幕交互模式绘制，导出图片时自动隐藏）
+        if (!cleanExport && (sigPos.isDragging || activeLayer === 'sig')) {
+          ctx.strokeStyle = activeLayer === 'sig' ? '#1a73e8' : '#aaa';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 4]);
+          ctx.strokeRect(-sw / 2 - 4, -sh / 2 - 4, sw + 8, sh + 8);
+        }
+        ctx.restore();
+      }
+    }
+
+    // ==========================================
+    // 鼠标与触控交互拖拽监听
+    // ==========================================
+    function getCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / (rect.width || 1);
+      const scaleY = canvas.height / (rect.height || 1);
+      let clientX = e.clientX;
+      let clientY = e.clientY;
+      if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else if (e.changedTouches && e.changedTouches.length > 0) {
+        clientX = e.changedTouches[0].clientX;
+        clientY = e.changedTouches[0].clientY;
+      }
+      return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+      };
+    }
+
+    function onPointerDown(e) {
+      const pos = getCanvasCoords(e);
+
+      // 碰撞检测：签名
+      const sigScale = parseInt(document.getElementById('sigScale').value, 10) / 100;
+      const sw = cachedSigCanvas ? (cachedSigCanvas.width * sigScale) : 100;
+      const sh = cachedSigCanvas ? (cachedSigCanvas.height * sigScale) : 40;
+      const inSig = Math.abs(pos.x - sigPos.x) <= sw / 2 + 10 && Math.abs(pos.y - sigPos.y) <= sh / 2 + 10;
+
+      // 碰撞检测：图章
+      const scale = parseInt(document.getElementById('stampScale').value, 10) / 100;
+      const r = cachedStamp ? (cachedStamp.radius * scale) : 70;
+      const distStamp = Math.hypot(pos.x - stampPos.x, pos.y - stampPos.y);
+      const inStamp = distStamp <= r + 15;
+
+      if (inSig) {
+        if (e.cancelable) e.preventDefault();
+        activeLayer = 'sig';
+        sigPos.isDragging = true;
+        sigPos.dragOffsetX = pos.x - sigPos.x;
+        sigPos.dragOffsetY = pos.y - sigPos.y;
+        canvas.style.cursor = 'grabbing';
+        document.getElementById('targetPosVal').innerText = `签名 X: ${Math.round(sigPos.x)}, Y: ${Math.round(sigPos.y)}`;
+        renderMain();
+      } else if (inStamp) {
+        if (e.cancelable) e.preventDefault();
+        activeLayer = 'stamp';
+        stampPos.isDragging = true;
+        stampPos.dragOffsetX = pos.x - stampPos.x;
+        stampPos.dragOffsetY = pos.y - stampPos.y;
+        canvas.style.cursor = 'grabbing';
+        document.getElementById('targetPosVal').innerText = `图章 X: ${Math.round(stampPos.x)}, Y: ${Math.round(stampPos.y)}`;
+        renderMain();
+      }
+    }
+
+    let renderAnimFrame = null;
+    function requestMainRender() {
+      if (renderAnimFrame) return;
+      renderAnimFrame = requestAnimationFrame(() => {
+        renderAnimFrame = null;
+        renderMain();
+      });
+    }
+
+    function onPointerMove(e) {
+      if (!stampPos.isDragging && !sigPos.isDragging) return;
+      if (e.cancelable) e.preventDefault();
+      const pos = getCanvasCoords(e);
+      if (stampPos.isDragging) {
+        stampPos.x = Math.round(pos.x - stampPos.dragOffsetX);
+        stampPos.y = Math.round(pos.y - stampPos.dragOffsetY);
+        stampPos.x = Math.max(30, Math.min(canvas.width - 30, stampPos.x));
+        stampPos.y = Math.max(30, Math.min(canvas.height - 30, stampPos.y));
+        document.getElementById('targetPosVal').innerText = `图章 X: ${stampPos.x}, Y: ${stampPos.y}`;
+        requestMainRender();
+      } else if (sigPos.isDragging) {
+        sigPos.x = Math.round(pos.x - sigPos.dragOffsetX);
+        sigPos.y = Math.round(pos.y - sigPos.dragOffsetY);
+        sigPos.x = Math.max(30, Math.min(canvas.width - 30, sigPos.x));
+        sigPos.y = Math.max(30, Math.min(canvas.height - 30, sigPos.y));
+        document.getElementById('targetPosVal').innerText = `签名 X: ${sigPos.x}, Y: ${sigPos.y}`;
+        requestMainRender();
+      }
+    }
+
+    function onPointerUp() {
+      if (renderAnimFrame) {
+        cancelAnimationFrame(renderAnimFrame);
+        renderAnimFrame = null;
+      }
+      if (stampPos.isDragging || sigPos.isDragging) {
+        stampPos.isDragging = false;
+        sigPos.isDragging = false;
+        canvas.style.cursor = 'crosshair';
+        renderMain();
+      }
+    }
+
+    canvas.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', onPointerUp);
+
+    canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+    window.addEventListener('touchmove', onPointerMove, { passive: false });
+    window.addEventListener('touchend', onPointerUp);
+    window.addEventListener('touchcancel', onPointerUp);
+
+    // ==========================================
+    // 文档多格式解析引擎（PDF、Word、图片）
+    // ==========================================
+    document.getElementById('docFileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const ext = file.name.split('.').pop().toLowerCase();
+
+      if (pdfDoc) {
+        try { pdfDoc.destroy(); } catch (err) {}
+        pdfDoc = null;
+      }
+
+      try {
+        if (ext === 'pdf') {
+          if (!window.pdfjsLib) {
+            alert('PDF 解析引擎未就绪，请检查运行环境组件。');
+            return;
+          }
+          const arrayBuffer = await file.arrayBuffer();
+          pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          totalPdfPages = pdfDoc.numPages;
+          currentPdfPage = 1;
+          document.getElementById('pageSelectRow').style.display = 'block';
+          await renderPdfPage(currentPdfPage);
+        } else if (ext === 'docx') {
+          if (!window.mammoth) {
+            alert('Word 解析引擎未就绪，请检查运行环境组件。');
+            return;
+          }
+          document.getElementById('pageSelectRow').style.display = 'none';
+          const arrayBuffer = await file.arrayBuffer();
+          const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
+          renderWordHtmlToDoc(result.value);
+        } else {
+          document.getElementById('pageSelectRow').style.display = 'none';
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            const img = new Image();
+            img.onload = () => {
+              canvas.width = img.width;
+              canvas.height = img.height;
+              currentDocImage = img;
+              renderMain();
+            };
+            img.onerror = () => {
+              alert('图片载入异常，请确认识别的文件是否为有效图片格式。');
+            };
+            img.src = evt.target.result;
+          };
+          reader.onerror = () => {
+            alert('文件读取失败，请检查文件访问权限。');
+          };
+          reader.readAsDataURL(file);
+        }
+      } catch (err) {
+        console.error('File load failed:', err);
+        alert('文件解析失败：' + (err.message || '文件可能损坏或受到密码保护。'));
+      }
+    });
+
+    async function renderPdfPage(pageNumber) {
+      if (!pdfDoc) return;
+      document.getElementById('pageInfo').innerText = `第 ${pageNumber} / ${totalPdfPages} 页`;
+      const page = await pdfDoc.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: 1.5 });
+
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = viewport.width;
+      offCanvas.height = viewport.height;
+      const offCtx = offCanvas.getContext('2d');
+
+      await page.render({ canvasContext: offCtx, viewport: viewport }).promise;
+
+      const img = new Image();
+      img.src = offCanvas.toDataURL();
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        currentDocImage = img;
+        renderMain();
+      };
+    }
+
+    function changePdfPage(delta) {
+      if (!pdfDoc) return;
+      const target = currentPdfPage + delta;
+      if (target >= 1 && target <= totalPdfPages) {
+        currentPdfPage = target;
+        renderPdfPage(currentPdfPage);
+      }
+    }
+
+    function renderWordHtmlToDoc(htmlContent) {
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = 800;
+      offCanvas.height = 1130;
+      const octx = offCanvas.getContext('2d');
+
+      octx.fillStyle = '#ffffff';
+      octx.fillRect(0, 0, 800, 1130);
+
+      octx.fillStyle = '#111';
+      octx.font = 'bold 20px "SimSun", serif';
+      octx.textAlign = 'center';
+      octx.fillText('Microsoft Word 导入文档预览', 400, 70);
+
+      octx.strokeStyle = '#ccc';
+      octx.lineWidth = 1;
+      octx.beginPath();
+      octx.moveTo(60, 90);
+      octx.lineTo(740, 90);
+      octx.stroke();
+
+      const tmpDiv = document.createElement('div');
+      tmpDiv.innerHTML = htmlContent;
+      const plainText = tmpDiv.innerText || tmpDiv.textContent;
+      const words = plainText.split('\n').filter(s => s.trim().length > 0);
+
+      octx.fillStyle = '#333';
+      octx.font = '15px "SimSun", serif';
+      octx.textAlign = 'left';
+
+      let y = 130;
+      for (const p of words) {
+        if (y > 1050) break;
+        const maxLen = 42;
+        for (let i = 0; i < p.length; i += maxLen) {
+          octx.fillText(p.substring(i, i + maxLen), 65, y);
+          y += 26;
+        }
+        y += 10;
+      }
+
+      const img = new Image();
+      img.src = offCanvas.toDataURL();
+      img.onload = () => {
+        canvas.width = 800;
+        canvas.height = 1130;
+        currentDocImage = img;
+        renderMain();
+      };
+    }
+
+    function resetDefaultDoc() {
+      document.getElementById('pageSelectRow').style.display = 'none';
+      canvas.width = 800;
+      canvas.height = 1130;
+      stampPos.x = 540;
+      stampPos.y = 800;
+      sigPos.x = 320;
+      sigPos.y = 810;
+
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = 800;
+      offCanvas.height = 1130;
+      const octx = offCanvas.getContext('2d');
+
+      octx.fillStyle = '#ffffff';
+      octx.fillRect(0, 0, 800, 1130);
+
+      octx.fillStyle = '#222';
+      octx.font = 'bold 22px "SimSun", serif';
+      octx.textAlign = 'center';
+      octx.fillText('技术项目阶段成果评审与交接单', 400, 90);
+
+      octx.strokeStyle = '#333';
+      octx.lineWidth = 2;
+      octx.beginPath();
+      octx.moveTo(80, 115);
+      octx.lineTo(720, 115);
+      octx.stroke();
+
+      octx.fillStyle = '#444';
+      octx.font = '15px "SimSun", serif';
+      octx.textAlign = 'left';
+      const items = [
+        '单据编号：FLOW-2026-QA091           密级等级：内部公开',
+        '审核项目：多格式文档渲染与印章图层管线测试',
+        '',
+        '评审意见简述：',
+        '1. 已完成 PDF 原生矢量解析引擎与 Word 文本流转换器验证。',
+        '2. 前端 Canvas 已挂载完整的极坐标弧形文字及多角星几何图章组件。',
+        '3. 鼠标交互坐标定位与图层透明度融合经复核表现正常。',
+        '',
+        '签署栏（可任意拖拽手写签名与印章至此）：'
+      ];
+      let y = 160;
+      items.forEach(it => { octx.fillText(it, 80, y); y += 32; });
+
+      // 签署落款框
+      octx.strokeStyle = '#bbb';
+      octx.setLineDash([6, 6]);
+      octx.strokeRect(180, 710, 520, 200);
+      octx.fillStyle = '#888';
+      octx.font = '13px sans-serif';
+      octx.fillText('经手签署人：（拖动左侧签名）', 200, 760);
+      octx.fillText('审批章签署区：（拖动右侧图章）', 420, 760);
+
+      const img = new Image();
+      img.src = offCanvas.toDataURL();
+      img.onload = () => {
+        currentDocImage = img;
+        updateStampCache();
+        createDemoHandwrittenSignature();
+        renderMain();
+      };
+    }
+
+    function resetPositions() {
+      stampPos.x = Math.round(canvas.width * 0.68);
+      stampPos.y = Math.round(canvas.height * 0.72);
+      sigPos.x = Math.round(canvas.width * 0.40);
+      sigPos.y = Math.round(canvas.height * 0.73);
+      const targetPosEl = document.getElementById('targetPosVal');
+      if (targetPosEl) targetPosEl.innerText = `图章与签名已一键归位`;
+      renderMain();
+    }
+
+    function exportDocument() {
+      // 1. 导出前静默执行一次无 UI 虚线框的纯净画面渲染
+      renderMain(true);
+
+      // 2. 生成带有规范时间戳的高清文件名，防止连续导出覆盖
+      const now = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+      // 3. 截取干净的高清图片并下载
+      const link = document.createElement('a');
+      link.download = `approved_signed_doc_${timestamp}.png`;
+      link.href = canvas.toDataURL('image/png', 1.0);
+      link.click();
+
+      // 4. 恢复屏幕上的交互高亮提示框
+      renderMain(false);
+    }
+
+    // 控件事件绑定
+    document.querySelectorAll('#docTab input, #docTab select').forEach(el => el.addEventListener('input', renderMain));
+    document.querySelectorAll('#stampTab input, #stampTab select').forEach(el => {
+      const handler = () => {
+        updateStampCache();
+        renderMain();
+      };
+      el.addEventListener('input', handler);
+      el.addEventListener('change', handler);
+    });
+    document.querySelectorAll('#sigTab input, #sigTab select').forEach(el => {
+      if (el.id !== 'penWidth' && el.id !== 'penColor') {
+        el.addEventListener('input', () => renderMain());
+        el.addEventListener('change', () => renderMain());
+      }
+    });
+    document.getElementById('penWidth').addEventListener('input', (e) => {
+      document.getElementById('penWidthVal').innerText = `${e.target.value}px`;
+      redrawSigCanvas();
+    });
+    document.getElementById('penColor').addEventListener('input', () => {
+      redrawSigCanvas();
+    });
+    document.getElementById('penColor').addEventListener('change', () => {
+      redrawSigCanvas();
+    });
+
+    // 初始化运行
+    initSigPad();
+    resetDefaultDoc();
+  </script>
+</body>
+</html>

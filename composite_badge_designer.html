@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>2D 徽标与图形管线自定义设计器</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      gap: 30px;
+      padding: 30px;
+      background: #f0f2f5;
+      margin: 0;
+      color: #333;
+    }
+    .panel {
+      background: #fff;
+      padding: 24px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .controls {
+      width: 410px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding-right: 10px;
+    }
+    .controls h3 { margin: 0 0 5px 0; font-size: 18px; color: #1a73e8; }
+    .section-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #1a73e8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 10px;
+      border-bottom: 2px solid #e8f0fe;
+      padding-bottom: 4px;
+    }
+    .control-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      color: #444;
+    }
+    input[type="text"], input[type="color"], select {
+      padding: 8px;
+      border: 1px solid #d0d7de;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    input[type="range"] {
+      width: 100%;
+      cursor: pointer;
+    }
+    .radio-group {
+      display: flex;
+      gap: 20px;
+      padding: 6px 0;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .radio-group label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .btn-group {
+      margin-top: 15px;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      flex: 1;
+      padding: 11px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-primary { background: #1a73e8; color: #fff; }
+    .btn-primary:hover { background: #1557b0; }
+    .btn-secondary { background: #34a853; color: #fff; }
+    .btn-secondary:hover { background: #2b8a43; }
+
+    .preview-box {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 420px;
+    }
+    .canvas-wrap {
+      background-image: linear-gradient(45deg, #eee 25%, transparent 25%), 
+                        linear-gradient(-45deg, #eee 25%, transparent 25%), 
+                        linear-gradient(45deg, transparent 75%, #eee 75%), 
+                        linear-gradient(-45deg, transparent 75%, #eee 75%);
+      background-size: 16px 16px;
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      background-color: #fff;
+    }
+    canvas {
+      display: block;
+    }
+    .hint-text {
+      font-size: 12px;
+      color: #666;
+      background: #f8f9fa;
+      border-left: 3px solid #1a73e8;
+      padding: 6px 10px;
+      margin-top: 4px;
+      border-radius: 0 4px 4px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 参数控制面板 -->
+  <div class="panel controls">
+    <h3>徽标流水线自定义配置</h3>
+
+    <div class="section-title">1. 外框与尺寸规格</div>
+    <div class="control-row">
+      <div class="control-label"><span>边框样式开关</span></div>
+      <div class="radio-group">
+        <label><input type="radio" name="borderStyle" value="double" checked> 双圈边框 (经典徽章)</label>
+        <label><input type="radio" name="borderStyle" value="single"> 单圈边框 (常规实心)</label>
+      </div>
+    </div>
+
+    <div class="control-row">
+      <div class="control-label"><span>外圈总半径 (外径大小)</span><span id="badgeRadiusVal">140px</span></div>
+      <input type="range" id="badgeRadius" min="70" max="180" value="140">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>外圈边框粗细</span><span id="borderWidthVal">5px</span></div>
+      <input type="range" id="borderWidth" min="1" max="12" value="5">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>画布输出分辨率 (DPI/清晰度)</span></div>
+      <select id="canvasResolution">
+        <option value="360" selected>屏幕自适应尺寸 (360 × 360 px, 约96 DPI)</option>
+        <option value="480">通用电子文档尺寸 (480 × 480 px, 约150 DPI)</option>
+        <option value="600">高清印刷/精细尺寸 (600 × 600 px, 约300 DPI)</option>
+      </select>
+      <div class="hint-text">
+        说明：此前默认的 140px 半径为便于屏幕端编辑的“视觉尺寸”。真实物理印章（约40mm）在300DPI高清文档中约对应 470px 直径。
+      </div>
+    </div>
+
+    <div class="section-title">2. 弧形文本配置 (算法一)</div>
+    <div class="control-row">
+      <div class="control-label"><span>弧形文本内容</span></div>
+      <input type="text" id="arcText" value="★ GRAPHICS DESIGN LAB ★">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>文字字号大小</span><span id="arcFontSizeVal">16px</span></div>
+      <input type="range" id="arcFontSize" min="10" max="32" value="16">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>文字排布半径 (位置)</span><span id="arcRadiusVal">105px</span></div>
+      <input type="range" id="arcRadius" min="40" max="170" value="105">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>圆弧跨度角 (散开范围)</span><span id="arcSweepVal">180°</span></div>
+      <input type="range" id="arcSweep" min="60" max="320" value="180">
+    </div>
+
+    <div class="section-title">3. 中心星形几何配置 (算法二)</div>
+    <div class="control-row">
+      <div class="control-label"><span>星形多角数</span><span id="starPointsVal">5</span></div>
+      <input type="range" id="starPoints" min="3" max="10" value="5">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>星形尺寸 (外半径大小)</span><span id="starSizeVal">38px</span></div>
+      <input type="range" id="starSize" min="10" max="90" value="38">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>垂直位置偏移 (Y 轴)</span><span id="starOffsetYVal">-10px</span></div>
+      <input type="range" id="starOffsetY" min="-100" max="100" value="-10">
+    </div>
+
+    <div class="section-title">4. 辅助文本与整体布局</div>
+    <div class="control-row">
+      <div class="control-label"><span>底部辅助文本</span></div>
+      <input type="text" id="subText" value="APPROVED • 2026">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>辅助文字字号</span><span id="subFontSizeVal">15px</span></div>
+      <input type="range" id="subFontSize" min="10" max="30" value="15">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>辅助文字 Y 轴偏移</span><span id="subOffsetYVal">65px</span></div>
+      <input type="range" id="subOffsetY" min="-100" max="140" value="65">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>整体倾斜角度</span><span id="rotateVal">-8°</span></div>
+      <input type="range" id="rotateDeg" min="-30" max="30" value="-8">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>主体颜色</span></div>
+      <input type="color" id="themeColor" value="#b71c1c" style="width: 100%; height: 38px;">
+    </div>
+
+    <div class="section-title">5. 像素侵蚀与噪点滤镜 (算法三)</div>
+    <div class="control-row">
+      <div class="control-label"><span>表面磨损/镂空率</span><span id="noiseRateVal">12%</span></div>
+      <input type="range" id="noiseRate" min="0" max="40" value="12">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>受力不均衰减度</span><span id="fadeRateVal">25%</span></div>
+      <input type="range" id="fadeRate" min="0" max="60" value="25">
+    </div>
+
+    <div class="btn-group">
+      <button class="btn-primary" onclick="downloadPNG()">下载透明 PNG</button>
+      <button class="btn-secondary" onclick="renderAll()">重新采样噪点</button>
+    </div>
+  </div>
+
+  <!-- 实时预览区 -->
+  <div class="panel preview-box">
+    <h3 style="margin-top:0; color:#444;">实时合成预览</h3>
+    <div class="canvas-wrap">
+      <canvas id="mainCanvas" width="360" height="360"></canvas>
+    </div>
+    <p style="font-size:12px; color:#888; margin-top:12px;">棋盘格背景表示透明通道，导出图片自带透明背景。</p>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // ==========================================
+    // 算法一：弧形文字排布
+    // ==========================================
+    function drawArcText(ctx, text, x0, y0, radius, startAngle, sweepAngle, fontSize) {
+      const n = text.length;
+      if (n === 0) return;
+      const step = n > 1 ? sweepAngle / (n - 1) : 0;
+
+      ctx.save();
+      ctx.font = `bold ${fontSize}px "SimHei", "Microsoft YaHei", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      for (let i = 0; i < n; i++) {
+        const theta = startAngle + i * step;
+        const x = x0 + radius * Math.cos(theta);
+        const y = y0 + radius * Math.sin(theta);
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(theta + Math.PI / 2);
+        ctx.fillText(text[i], 0, 0);
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+
+    // ==========================================
+    // 算法二：多角星几何生成
+    // ==========================================
+    function drawStar(ctx, x0, y0, points, rOut, rIn) {
+      const step = Math.PI / points;
+      ctx.beginPath();
+      for (let i = 0; i < 2 * points; i++) {
+        const r = (i % 2 === 0) ? rOut : rIn;
+        const angle = i * step - Math.PI / 2;
+        const x = x0 + r * Math.cos(angle);
+        const y = y0 + r * Math.sin(angle);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // ==========================================
+    // 算法三：像素侵蚀噪点
+    // ==========================================
+    function applyNoise(ctx, width, height, erosionRate, fadeRate) {
+      if (erosionRate === 0 && fadeRate === 0) return;
+      const imgData = ctx.getImageData(0, 0, width, height);
+      const data = imgData.data;
+
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 0) {
+          const rand = Math.random();
+          if (rand < erosionRate) {
+            data[i + 3] = 0; // 镂空脱墨
+          } else if (rand < erosionRate + fadeRate) {
+            // 受力不均衰减
+            data[i + 3] = Math.floor(data[i + 3] * (0.3 + 0.7 * Math.random()));
+          }
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }
+
+    // ==========================================
+    // 总装配流水线
+    // ==========================================
+    function renderAll() {
+      // 1. 读取分辨率与外径大小
+      const res = parseInt(document.getElementById('canvasResolution').value, 10);
+      if (canvas.width !== res) {
+        canvas.width = res;
+        canvas.height = res;
+      }
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+
+      const borderStyle = document.querySelector('input[name="borderStyle"]:checked').value;
+      const badgeRadius = parseInt(document.getElementById('badgeRadius').value, 10);
+      const borderWidth = parseInt(document.getElementById('borderWidth').value, 10);
+
+      // 2. 读取文字与星形大小及位置
+      const arcText = document.getElementById('arcText').value.trim();
+      const arcFontSize = parseInt(document.getElementById('arcFontSize').value, 10);
+      const arcRadius = parseInt(document.getElementById('arcRadius').value, 10);
+      const arcSweepDeg = parseInt(document.getElementById('arcSweep').value, 10);
+
+      const starPoints = parseInt(document.getElementById('starPoints').value, 10);
+      const starSize = parseInt(document.getElementById('starSize').value, 10);
+      const starOffsetY = parseInt(document.getElementById('starOffsetY').value, 10);
+
+      const subText = document.getElementById('subText').value.trim();
+      const subFontSize = parseInt(document.getElementById('subFontSize').value, 10);
+      const subOffsetY = parseInt(document.getElementById('subOffsetY').value, 10);
+      const rotateDeg = parseInt(document.getElementById('rotateDeg').value, 10);
+      const color = document.getElementById('themeColor').value;
+
+      const noiseRate = parseInt(document.getElementById('noiseRate').value, 10) / 100;
+      const fadeRate = parseInt(document.getElementById('fadeRate').value, 10) / 100;
+
+      // 更新界面数值标签
+      document.getElementById('badgeRadiusVal').innerText = badgeRadius + 'px';
+      document.getElementById('borderWidthVal').innerText = borderWidth + 'px';
+      document.getElementById('arcFontSizeVal').innerText = arcFontSize + 'px';
+      document.getElementById('arcRadiusVal').innerText = arcRadius + 'px';
+      document.getElementById('arcSweepVal').innerText = arcSweepDeg + '°';
+      document.getElementById('starPointsVal').innerText = starPoints;
+      document.getElementById('starSizeVal').innerText = starSize + 'px';
+      document.getElementById('starOffsetYVal').innerText = starOffsetY + 'px';
+      document.getElementById('subFontSizeVal').innerText = subFontSize + 'px';
+      document.getElementById('subOffsetYVal').innerText = subOffsetY + 'px';
+      document.getElementById('rotateVal').innerText = rotateDeg + '°';
+      document.getElementById('noiseRateVal').innerText = Math.round(noiseRate * 100) + '%';
+      document.getElementById('fadeRateVal').innerText = Math.round(fadeRate * 100) + '%';
+
+      // 3. 清空画布
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      // 整体中心倾斜旋转
+      ctx.translate(cx, cy);
+      ctx.rotate((rotateDeg * Math.PI) / 180);
+      ctx.translate(-cx, -cy);
+
+      ctx.fillStyle = color;
+      ctx.strokeStyle = color;
+
+      // 4. 绘制外同心圆轮廓（单圈 / 双圈判断）
+      ctx.lineWidth = borderWidth;
+      ctx.beginPath();
+      ctx.arc(cx, cy, badgeRadius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      if (borderStyle === 'double') {
+        const innerBorderRadius = Math.max(badgeRadius - 10, 10);
+        ctx.lineWidth = Math.max(borderWidth * 0.4, 1);
+        ctx.beginPath();
+        ctx.arc(cx, cy, innerBorderRadius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // 5. 绘制弧形文本
+      if (arcText.length > 0) {
+        const sweepRad = (arcSweepDeg * Math.PI) / 180;
+        const startRad = -Math.PI / 2 - sweepRad / 2;
+        drawArcText(ctx, arcText, cx, cy, arcRadius, startRad, sweepRad, arcFontSize);
+      }
+
+      // 6. 绘制中心星形几何体
+      if (starSize > 0) {
+        const rIn = starSize * 0.382;
+        drawStar(ctx, cx, cy + starOffsetY, starPoints, starSize, rIn);
+      }
+
+      // 7. 绘制辅助标识文本
+      if (subText.length > 0) {
+        ctx.font = `bold ${subFontSize}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(subText, cx, cy + subOffsetY);
+      }
+
+      ctx.restore();
+
+      // 8. 施加像素噪点与磨损滤镜
+      applyNoise(ctx, canvas.width, canvas.height, noiseRate, fadeRate);
+    }
+
+    function downloadPNG() {
+      const link = document.createElement('a');
+      link.download = 'custom-badge.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    // 绑定所有控件的实时输入更新
+    document.querySelectorAll('input, select').forEach(el => {
+      el.addEventListener('input', renderAll);
+    });
+
+    // 初始首屏渲染
+    renderAll();
+  </script>
+</body>
+</html>

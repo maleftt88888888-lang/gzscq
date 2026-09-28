@@ -1,0 +1,27 @@
+# Python & PyInstaller builds
+__pycache__/
+build/
+dist/
+*.spec
+*.pyc
+
+# OS & Temp
+.DS_Store
+Thumbs.db
+temp*
+*.log
+
+# Other projects & local configs
+Spider_XHS/
+covers_blackgold/
+miniprogram-app/
+*.json
+x64dbg_client.py
+generate_covers.py
+upload_covers.py
+parse_articles.py
+articles_summary.txt
+preview_*.png
+8080*
+1.html
+新建文本文档.txt
