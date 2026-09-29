@@ -370,8 +370,8 @@
       </div>
 
       <div class="control-row">
-        <div class="control-label"><span>外圈线条粗细</span><span id="borderWidthVal">4px</span></div>
-        <input type="range" id="borderWidth" min="1" max="8" value="4">
+        <div class="control-label"><span>外圈线条粗细</span><span id="borderWidthVal">6px (约1.0mm)</span></div>
+        <input type="range" id="borderWidth" min="1" max="12" value="6">
       </div>
 
       <div class="control-row">
@@ -390,13 +390,13 @@
       </div>
 
       <div class="control-row">
-        <div class="control-label"><span>弧形文字字号 (最小到最大调节)</span><span id="arcFontSizeVal">14px</span></div>
-        <input type="range" id="arcFontSize" min="6" max="96" value="14">
+        <div class="control-label"><span>弧形文字字号 (最小到最大调节)</span><span id="arcFontSizeVal">24px (约4.2mm)</span></div>
+        <input type="range" id="arcFontSize" min="6" max="96" value="24">
       </div>
 
       <div class="control-row">
-        <div class="control-label"><span>圆弧跨度角 (散开范围)</span><span id="arcSweepVal">180°</span></div>
-        <input type="range" id="arcSweep" min="10" max="350" value="180">
+        <div class="control-label"><span>圆弧跨度角 (散开范围)</span><span id="arcSweepVal">240°</span></div>
+        <input type="range" id="arcSweep" min="10" max="350" value="240">
       </div>
 
       <div class="control-row">
@@ -410,13 +410,13 @@
       </div>
 
       <div class="control-row">
-        <div class="control-label"><span>中心星形外径</span><span id="starSizeVal">32px</span></div>
-        <input type="range" id="starSize" min="10" max="70" value="32">
+        <div class="control-label"><span>中心星形外径</span><span id="starSizeVal">42px (约14mm)</span></div>
+        <input type="range" id="starSize" min="10" max="80" value="42">
       </div>
 
       <div class="control-row">
-        <div class="control-label"><span>中心星形 Y 轴偏置</span><span id="starOffsetYVal">-8px</span></div>
-        <input type="range" id="starOffsetY" min="-60" max="60" value="-8">
+        <div class="control-label"><span>中心星形 Y 轴偏置</span><span id="starOffsetYVal">-6px</span></div>
+        <input type="range" id="starOffsetY" min="-60" max="60" value="-6">
       </div>
 
       <div class="control-row">
@@ -425,8 +425,8 @@
       </div>
 
       <div class="control-row">
-        <div class="control-label"><span>底部文字字号大小</span><span id="subFontSizeVal">12px</span></div>
-        <input type="range" id="subFontSize" min="6" max="60" value="12">
+        <div class="control-label"><span>底部文字字号大小</span><span id="subFontSizeVal">18px (约3.0mm)</span></div>
+        <input type="range" id="subFontSize" min="6" max="60" value="18">
       </div>
 
       <div class="control-row">
@@ -1039,15 +1039,16 @@
 
       // 实时同步更新标签显示
       if (document.getElementById('badgeRadiusVal')) {
-        document.getElementById('badgeRadiusVal').innerText = `${badgeRadius}px (约${Math.round(badgeRadius * 0.34)}mm)`;
-        document.getElementById('borderWidthVal').innerText = `${borderWidth}px`;
-        document.getElementById('arcFontSizeVal').innerText = `${arcFontSize}px`;
+        const mm = Math.round(badgeRadius * 0.34);
+        document.getElementById('badgeRadiusVal').innerText = `${badgeRadius}px (约${mm}mm)`;
+        document.getElementById('borderWidthVal').innerText = `${borderWidth}px (约${(borderWidth * 0.17).toFixed(1)}mm)`;
+        document.getElementById('arcFontSizeVal').innerText = `${arcFontSize}px (约${(arcFontSize * 0.17).toFixed(1)}mm)`;
         document.getElementById('arcSweepVal').innerText = `${arcSweep}°`;
         document.getElementById('arcStartAngleVal').innerText = `${arcStartAngle}°`;
         document.getElementById('starPointsVal').innerText = starPoints;
-        document.getElementById('starSizeVal').innerText = `${starSize}px`;
+        document.getElementById('starSizeVal').innerText = `${starSize}px (约${Math.round(starSize * 0.34)}mm)`;
         document.getElementById('starOffsetYVal').innerText = `${starOffsetY}px`;
-        document.getElementById('subFontSizeVal').innerText = `${subFontSize}px`;
+        document.getElementById('subFontSizeVal').innerText = `${subFontSize}px (约${(subFontSize * 0.17).toFixed(1)}mm)`;
         document.getElementById('subRadiusVal').innerText = `${subRadius}px`;
         document.getElementById('subSweepVal').innerText = `${subSweep}°`;
         document.getElementById('subStartAngleVal').innerText = `${subStartAngle}°`;
@@ -1327,7 +1328,8 @@
       if (!pdfDoc) return;
       document.getElementById('pageInfo').innerText = `第 ${pageNumber} / ${totalPdfPages} 页`;
       const page = await pdfDoc.getPage(pageNumber);
-      const viewport = page.getViewport({ scale: 1.5 });
+      // 标准 A4 采用 2.0 缩放比，精确匹配 150 DPI 高清 A4 像素规格 (~1240x1754)
+      const viewport = page.getViewport({ scale: 2.0 });
 
       const offCanvas = document.createElement('canvas');
       offCanvas.width = viewport.width;
@@ -1356,24 +1358,25 @@
     }
 
     function renderWordHtmlToDoc(htmlContent) {
+      // 标准 A4 规格：210mm x 297mm，150 DPI 对应 1240 x 1754 像素
       const offCanvas = document.createElement('canvas');
-      offCanvas.width = 800;
-      offCanvas.height = 1130;
+      offCanvas.width = 1240;
+      offCanvas.height = 1754;
       const octx = offCanvas.getContext('2d');
 
       octx.fillStyle = '#ffffff';
-      octx.fillRect(0, 0, 800, 1130);
+      octx.fillRect(0, 0, 1240, 1754);
 
       octx.fillStyle = '#111';
-      octx.font = 'bold 20px "SimSun", serif';
+      octx.font = 'bold 32px "SimSun", serif';
       octx.textAlign = 'center';
-      octx.fillText('Microsoft Word 导入文档预览', 400, 70);
+      octx.fillText('Microsoft Word 导入文档预览', 620, 110);
 
       octx.strokeStyle = '#ccc';
-      octx.lineWidth = 1;
+      octx.lineWidth = 2;
       octx.beginPath();
-      octx.moveTo(60, 90);
-      octx.lineTo(740, 90);
+      octx.moveTo(100, 145);
+      octx.lineTo(1140, 145);
       octx.stroke();
 
       const tmpDiv = document.createElement('div');
@@ -1382,25 +1385,25 @@
       const words = plainText.split('\n').filter(s => s.trim().length > 0);
 
       octx.fillStyle = '#333';
-      octx.font = '15px "SimSun", serif';
+      octx.font = '22px "SimSun", serif';
       octx.textAlign = 'left';
 
-      let y = 130;
+      let y = 200;
       for (const p of words) {
-        if (y > 1050) break;
-        const maxLen = 42;
+        if (y > 1650) break;
+        const maxLen = 44;
         for (let i = 0; i < p.length; i += maxLen) {
-          octx.fillText(p.substring(i, i + maxLen), 65, y);
-          y += 26;
+          octx.fillText(p.substring(i, i + maxLen), 100, y);
+          y += 38;
         }
-        y += 10;
+        y += 16;
       }
 
       const img = new Image();
       img.src = offCanvas.toDataURL();
       img.onload = () => {
-        canvas.width = 800;
-        canvas.height = 1130;
+        canvas.width = 1240;
+        canvas.height = 1754;
         currentDocImage = img;
         renderMain();
       };
@@ -1408,35 +1411,36 @@
 
     function resetDefaultDoc() {
       document.getElementById('pageSelectRow').style.display = 'none';
-      canvas.width = 800;
-      canvas.height = 1130;
-      stampPos.x = 540;
-      stampPos.y = 800;
-      sigPos.x = 320;
-      sigPos.y = 810;
+      // 严格符合 ISO 216 国际标准 A4 纸张比例 (210mm x 297mm, 150 DPI = 1240 x 1754)
+      canvas.width = 1240;
+      canvas.height = 1754;
+      stampPos.x = 840;
+      stampPos.y = 1245;
+      sigPos.x = 490;
+      sigPos.y = 1255;
 
       const offCanvas = document.createElement('canvas');
-      offCanvas.width = 800;
-      offCanvas.height = 1130;
+      offCanvas.width = 1240;
+      offCanvas.height = 1754;
       const octx = offCanvas.getContext('2d');
 
       octx.fillStyle = '#ffffff';
-      octx.fillRect(0, 0, 800, 1130);
+      octx.fillRect(0, 0, 1240, 1754);
 
       octx.fillStyle = '#222';
-      octx.font = 'bold 22px "SimSun", serif';
+      octx.font = 'bold 34px "SimSun", serif';
       octx.textAlign = 'center';
-      octx.fillText('技术项目阶段成果评审与交接单', 400, 90);
+      octx.fillText('技术项目阶段成果评审与交接单', 620, 140);
 
       octx.strokeStyle = '#333';
-      octx.lineWidth = 2;
+      octx.lineWidth = 3;
       octx.beginPath();
-      octx.moveTo(80, 115);
-      octx.lineTo(720, 115);
+      octx.moveTo(120, 175);
+      octx.lineTo(1120, 175);
       octx.stroke();
 
       octx.fillStyle = '#444';
-      octx.font = '15px "SimSun", serif';
+      octx.font = '22px "SimSun", serif';
       octx.textAlign = 'left';
       const items = [
         '单据编号：FLOW-2026-QA091           密级等级：内部公开',
@@ -1449,17 +1453,18 @@
         '',
         '签署栏（可任意拖拽手写签名与印章至此）：'
       ];
-      let y = 160;
-      items.forEach(it => { octx.fillText(it, 80, y); y += 32; });
+      let y = 240;
+      items.forEach(it => { octx.fillText(it, 120, y); y += 48; });
 
-      // 签署落款框
+      // 签署落款框（按 A4 标准落款区比例设定）
       octx.strokeStyle = '#bbb';
-      octx.setLineDash([6, 6]);
-      octx.strokeRect(180, 710, 520, 200);
+      octx.lineWidth = 2;
+      octx.setLineDash([8, 8]);
+      octx.strokeRect(280, 1100, 780, 310);
       octx.fillStyle = '#888';
-      octx.font = '13px sans-serif';
-      octx.fillText('经手签署人：（拖动左侧签名）', 200, 760);
-      octx.fillText('审批章签署区：（拖动右侧图章）', 420, 760);
+      octx.font = '20px sans-serif';
+      octx.fillText('经手签署人：（拖动左侧签名）', 310, 1170);
+      octx.fillText('审批章签署区：（拖动右侧图章）', 660, 1170);
 
       const img = new Image();
       img.src = offCanvas.toDataURL();
@@ -1473,9 +1478,9 @@
 
     function resetPositions() {
       stampPos.x = Math.round(canvas.width * 0.68);
-      stampPos.y = Math.round(canvas.height * 0.72);
+      stampPos.y = Math.round(canvas.height * 0.71);
       sigPos.x = Math.round(canvas.width * 0.40);
-      sigPos.y = Math.round(canvas.height * 0.73);
+      sigPos.y = Math.round(canvas.height * 0.72);
       const targetPosEl = document.getElementById('targetPosVal');
       if (targetPosEl) targetPosEl.innerText = `图章与签名已一键归位`;
       renderMain();
