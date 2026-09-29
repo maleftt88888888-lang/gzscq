@@ -325,16 +325,19 @@
           <option value="color-burn">颜色加深 (Color Burn - 深层油墨结合)</option>
           <option value="darken">暗部优先 (Darken - 取底字暗色)</option>
         </select>
+        <div style="font-size:11px; color:#f59e0b; margin-top:5px; line-height:1.4;">
+          💡 <b>提示</b>：色彩融合模式需印章覆盖在文字/表格线上可见明显对比（正片叠底呈现“红章透黑字”，正常覆盖会直接遮挡黑字）。
+        </div>
       </div>
 
       <div class="control-row">
         <div class="control-label"><span>印泥渗透度 (透明融合)</span><span id="stampOpacityVal">0.85</span></div>
-        <input type="range" id="stampOpacity" min="0.2" max="1" step="0.05" value="0.85">
+        <input type="range" id="stampOpacity" min="0.1" max="1" step="0.05" value="0.85">
       </div>
 
       <div class="control-row">
-        <div class="control-label"><span>纸张底墨融合强度</span><span id="bleedIntensityVal">70%</span></div>
-        <input type="range" id="bleedIntensity" min="0" max="100" value="70">
+        <div class="control-label"><span>纸张底墨融合强度 (边缘墨晕)</span><span id="bleedIntensityVal">35%</span></div>
+        <input type="range" id="bleedIntensity" min="0" max="100" value="35">
       </div>
 
       <div class="sub-section-title">形态与空间定位</div>
@@ -350,7 +353,7 @@
       </div>
 
       <div class="control-row">
-        <div class="control-label"><span>当前选中对象位置</span><span id="targetPosVal">图章 X: 540, Y: 800</span></div>
+        <div class="control-label"><span>当前选中对象位置</span><span id="targetPosVal">图章 X: 760, Y: 1250</span></div>
       </div>
     </div>
 
@@ -511,12 +514,12 @@
 
       <div class="control-row">
         <div class="control-label"><span>签名笔墨浓淡 (透明融合)</span><span id="sigOpacityVal">0.95</span></div>
-        <input type="range" id="sigOpacity" min="0.2" max="1" step="0.05" value="0.95">
+        <input type="range" id="sigOpacity" min="0.1" max="1" step="0.05" value="0.95">
       </div>
 
       <div class="control-row">
-        <div class="control-label"><span>签名底墨融合强度</span><span id="sigBleedVal">60%</span></div>
-        <input type="range" id="sigBleed" min="0" max="100" value="60">
+        <div class="control-label"><span>签名底墨融合强度 (边缘墨晕)</span><span id="sigBleedVal">30%</span></div>
+        <input type="range" id="sigBleed" min="0" max="100" value="30">
       </div>
 
       <div class="control-row">
@@ -1078,7 +1081,6 @@
       const blendMode = document.getElementById('blendMode').value;
       const opacity = parseFloat(document.getElementById('stampOpacity').value);
       const bleed = parseInt(document.getElementById('bleedIntensity').value, 10) / 100;
-      const effectiveAlpha = Math.max(0.1, opacity * (0.6 + 0.4 * (1 - bleed * 0.3)));
 
       // 2. 绘制盖印印章
       if (!cachedStamp) updateStampCache();
@@ -1094,12 +1096,20 @@
       ctx.save();
       ctx.translate(stampPos.x, stampPos.y);
       ctx.rotate((rot * Math.PI) / 180);
-      ctx.globalAlpha = effectiveAlpha;
+      ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = blendMode;
+
+      // 纸张底墨物理渗透晕染（动态模拟纸张纤维吸墨扩散）
+      if (bleed > 0.05) {
+        ctx.filter = `blur(${(bleed * 2.2).toFixed(1)}px)`;
+      } else {
+        ctx.filter = 'none';
+      }
 
       const drawSize = cachedStamp.canvas.width * scale;
       ctx.drawImage(cachedStamp.canvas, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
 
+      ctx.filter = 'none';
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1.0;
 
@@ -1123,7 +1133,6 @@
         const sigBlendMode = document.getElementById('sigBlendMode').value;
         const sigOpacity = parseFloat(document.getElementById('sigOpacity').value);
         const sigBleed = parseInt(document.getElementById('sigBleed').value, 10) / 100;
-        const effectiveSigAlpha = Math.max(0.1, sigOpacity * (0.7 + 0.3 * (1 - sigBleed * 0.4)));
 
         document.getElementById('sigOpacityVal').innerText = sigOpacity;
         document.getElementById('sigBleedVal').innerText = Math.round(sigBleed * 100) + '%';
@@ -1131,13 +1140,20 @@
         ctx.save();
         ctx.translate(sigPos.x, sigPos.y);
         ctx.rotate((sigRot * Math.PI) / 180);
-        ctx.globalAlpha = effectiveSigAlpha;
+        ctx.globalAlpha = sigOpacity;
         ctx.globalCompositeOperation = sigBlendMode;
+
+        if (sigBleed > 0.05) {
+          ctx.filter = `blur(${(sigBleed * 1.8).toFixed(1)}px)`;
+        } else {
+          ctx.filter = 'none';
+        }
 
         const sw = cachedSigCanvas.width * sigScale;
         const sh = cachedSigCanvas.height * sigScale;
         ctx.drawImage(cachedSigCanvas, -sw / 2, -sh / 2, sw, sh);
 
+        ctx.filter = 'none';
         ctx.globalCompositeOperation = 'source-over';
         ctx.globalAlpha = 1.0;
 
@@ -1414,10 +1430,10 @@
       // 严格符合 ISO 216 国际标准 A4 纸张比例 (210mm x 297mm, 150 DPI = 1240 x 1754)
       canvas.width = 1240;
       canvas.height = 1754;
-      stampPos.x = 840;
-      stampPos.y = 1245;
-      sigPos.x = 490;
-      sigPos.y = 1255;
+      stampPos.x = 760;
+      stampPos.y = 1250;
+      sigPos.x = 420;
+      sigPos.y = 1260;
 
       const offCanvas = document.createElement('canvas');
       offCanvas.width = 1240;
@@ -1460,11 +1476,21 @@
       octx.strokeStyle = '#bbb';
       octx.lineWidth = 2;
       octx.setLineDash([8, 8]);
-      octx.strokeRect(280, 1100, 780, 310);
-      octx.fillStyle = '#888';
-      octx.font = '20px sans-serif';
-      octx.fillText('经手签署人：（拖动左侧签名）', 310, 1170);
-      octx.fillText('审批章签署区：（拖动右侧图章）', 660, 1170);
+      octx.strokeRect(200, 1100, 840, 300);
+      octx.setLineDash([]);
+
+      octx.fillStyle = '#111';
+      octx.font = 'bold 22px "SimSun", serif';
+      octx.fillText('经审查，该阶段技术成果符合技术规范，准予归档并盖章核准生效。', 230, 1160);
+
+      octx.font = '20px "SimSun", serif';
+      octx.fillStyle = '#444';
+      octx.fillText('经手签署人：（拖动签名压在下方横线）', 230, 1240);
+      octx.fillText('审批盖章处：（印章默认压在此文字上）', 600, 1240);
+
+      octx.font = '18px "SimSun", serif';
+      octx.fillStyle = '#666';
+      octx.fillText('核准确认日期：2026 年 09 月 29 日', 600, 1315);
 
       const img = new Image();
       img.src = offCanvas.toDataURL();
@@ -1477,10 +1503,10 @@
     }
 
     function resetPositions() {
-      stampPos.x = Math.round(canvas.width * 0.68);
-      stampPos.y = Math.round(canvas.height * 0.71);
-      sigPos.x = Math.round(canvas.width * 0.40);
-      sigPos.y = Math.round(canvas.height * 0.72);
+      stampPos.x = 760;
+      stampPos.y = 1250;
+      sigPos.x = 420;
+      sigPos.y = 1260;
       const targetPosEl = document.getElementById('targetPosVal');
       if (targetPosEl) targetPosEl.innerText = `图章与签名已一键归位`;
       renderMain();
