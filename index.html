@@ -144,14 +144,22 @@
       overflow: auto;
       display: flex;
       justify-content: center;
-      align-items: flex-start;
-      padding: 24px;
+      align-items: center;
+      padding: 20px;
       position: relative;
+      min-height: 0;
     }
     #renderCanvas {
       background: #fff;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.35);
       cursor: crosshair;
+      max-width: 100%;
+      max-height: calc(100vh - 80px);
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      display: block;
+      border-radius: 2px;
     }
     .info-badge {
       background: var(--badge-bg);
@@ -297,6 +305,13 @@
       <div class="control-row">
         <div class="control-label"><span>选择本地文件</span></div>
         <input type="file" id="docFileInput" accept=".pdf, .docx, image/*">
+      </div>
+
+      <div class="control-row">
+        <div class="control-label"><span>底图实际尺寸 (导出规格)</span><span id="docDimensionsVal" style="color:var(--primary); font-family:monospace; font-weight:700;">1240 × 1754 px</span></div>
+        <div style="font-size:11px; color:var(--text-sub); line-height:1.4;">
+          📐 <b>尺寸说明</b>：屏幕预览已开启自适应居中；导出的图片<b>完全按底图/PDF的实际纸张像素尺寸</b>输出，不强制设为 A4。
+        </div>
       </div>
 
       <div class="control-row">
@@ -553,7 +568,7 @@
 
     <!-- 底部操作按钮 -->
     <div class="btn-group">
-      <button class="action-btn btn-success" onclick="exportDocument()">导出当前完整签批文档 (PNG)</button>
+      <button class="action-btn btn-success" onclick="exportDocument()">导出完整签批文档 (按实际底图规格输出)</button>
       <button class="action-btn btn-primary" onclick="resetDefaultDoc()">加载默认示例文档</button>
     </div>
   </div>
@@ -1319,9 +1334,18 @@
           reader.onload = (evt) => {
             const img = new Image();
             img.onload = () => {
-              canvas.width = img.width;
-              canvas.height = img.height;
+              // 核心：采用导入图片的实际物理尺寸，绝不强制固定为 A4
+              canvas.width = img.naturalWidth || img.width;
+              canvas.height = img.naturalHeight || img.height;
               currentDocImage = img;
+
+              // 自动将图章与签名适配到实际底图的合理签署区域
+              stampPos.x = Math.round(canvas.width * 0.75);
+              stampPos.y = Math.round(canvas.height * 0.80);
+              sigPos.x = Math.round(canvas.width * 0.40);
+              sigPos.y = Math.round(canvas.height * 0.81);
+
+              updateDocInfoDisplay();
               renderMain();
             };
             img.onerror = () => {
@@ -1344,12 +1368,12 @@
       if (!pdfDoc) return;
       document.getElementById('pageInfo').innerText = `第 ${pageNumber} / ${totalPdfPages} 页`;
       const page = await pdfDoc.getPage(pageNumber);
-      // 标准 A4 采用 2.0 缩放比，精确匹配 150 DPI 高清 A4 像素规格 (~1240x1754)
+      // 按照 PDF 原生纸张的实际物理长宽比例进行渲染（不强制缩放到固定 A4）
       const viewport = page.getViewport({ scale: 2.0 });
 
       const offCanvas = document.createElement('canvas');
-      offCanvas.width = viewport.width;
-      offCanvas.height = viewport.height;
+      offCanvas.width = Math.round(viewport.width);
+      offCanvas.height = Math.round(viewport.height);
       const offCtx = offCanvas.getContext('2d');
 
       await page.render({ canvasContext: offCtx, viewport: viewport }).promise;
@@ -1357,9 +1381,19 @@
       const img = new Image();
       img.src = offCanvas.toDataURL();
       img.onload = () => {
+        // 画布尺寸跟随当前 PDF 页面的真实尺寸，导出亦按此实际规格输出
         canvas.width = img.width;
         canvas.height = img.height;
         currentDocImage = img;
+
+        if (stampPos.x > canvas.width - 60 || stampPos.y > canvas.height - 60) {
+          stampPos.x = Math.round(canvas.width * 0.72);
+          stampPos.y = Math.round(canvas.height * 0.78);
+          sigPos.x = Math.round(canvas.width * 0.40);
+          sigPos.y = Math.round(canvas.height * 0.79);
+        }
+
+        updateDocInfoDisplay();
         renderMain();
       };
     }
@@ -1374,53 +1408,85 @@
     }
 
     function renderWordHtmlToDoc(htmlContent) {
-      // 标准 A4 规格：210mm x 297mm，150 DPI 对应 1240 x 1754 像素
-      const offCanvas = document.createElement('canvas');
-      offCanvas.width = 1240;
-      offCanvas.height = 1754;
-      const octx = offCanvas.getContext('2d');
-
-      octx.fillStyle = '#ffffff';
-      octx.fillRect(0, 0, 1240, 1754);
-
-      octx.fillStyle = '#111';
-      octx.font = 'bold 32px "SimSun", serif';
-      octx.textAlign = 'center';
-      octx.fillText('Microsoft Word 导入文档预览', 620, 110);
-
-      octx.strokeStyle = '#ccc';
-      octx.lineWidth = 2;
-      octx.beginPath();
-      octx.moveTo(100, 145);
-      octx.lineTo(1140, 145);
-      octx.stroke();
-
       const tmpDiv = document.createElement('div');
       tmpDiv.innerHTML = htmlContent;
       const plainText = tmpDiv.innerText || tmpDiv.textContent;
       const words = plainText.split('\n').filter(s => s.trim().length > 0);
 
+      // 根据 Word 文本实际行数自适应计算文档高度，不固定限制为 A4
+      let totalLines = 0;
+      const maxLen = 42;
+      for (const p of words) {
+        totalLines += Math.ceil(p.length / maxLen);
+      }
+      const actualWidth = 1200;
+      const actualHeight = Math.max(900, 220 + totalLines * 42 + 360);
+
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = actualWidth;
+      offCanvas.height = actualHeight;
+      const octx = offCanvas.getContext('2d');
+
+      octx.fillStyle = '#ffffff';
+      octx.fillRect(0, 0, actualWidth, actualHeight);
+
+      octx.fillStyle = '#111';
+      octx.font = 'bold 30px "SimSun", serif';
+      octx.textAlign = 'center';
+      octx.fillText('Microsoft Word 导入文档预览', actualWidth / 2, 100);
+
+      octx.strokeStyle = '#ccc';
+      octx.lineWidth = 2;
+      octx.beginPath();
+      octx.moveTo(80, 135);
+      octx.lineTo(actualWidth - 80, 135);
+      octx.stroke();
+
       octx.fillStyle = '#333';
       octx.font = '22px "SimSun", serif';
       octx.textAlign = 'left';
 
-      let y = 200;
+      let y = 190;
       for (const p of words) {
-        if (y > 1650) break;
-        const maxLen = 44;
         for (let i = 0; i < p.length; i += maxLen) {
-          octx.fillText(p.substring(i, i + maxLen), 100, y);
+          octx.fillText(p.substring(i, i + maxLen), 90, y);
           y += 38;
         }
-        y += 16;
+        y += 14;
       }
+
+      // 签署落款框自动跟随内容高度置底
+      const boxY = actualHeight - 300;
+      octx.strokeStyle = '#bbb';
+      octx.lineWidth = 2;
+      octx.setLineDash([8, 8]);
+      octx.strokeRect(160, boxY, 880, 240);
+      octx.setLineDash([]);
+
+      octx.fillStyle = '#111';
+      octx.font = 'bold 22px "SimSun", serif';
+      octx.fillText('经审查，该阶段技术成果符合技术规范，准予归档并盖章核准生效。', 190, boxY + 55);
+
+      octx.font = '20px "SimSun", serif';
+      octx.fillStyle = '#444';
+      octx.fillText('经手签署人：（拖动左侧签名）', 190, boxY + 130);
+      octx.fillText('核准单位签章：（红章默认压在此文字上）', 560, boxY + 130);
+
+      octx.font = '18px "SimSun", serif';
+      octx.fillStyle = '#666';
+      octx.fillText('核准确认日期：2026 年 09 月 29 日', 560, boxY + 195);
 
       const img = new Image();
       img.src = offCanvas.toDataURL();
       img.onload = () => {
-        canvas.width = 1240;
-        canvas.height = 1754;
+        canvas.width = actualWidth;
+        canvas.height = actualHeight;
         currentDocImage = img;
+        stampPos.x = 720;
+        stampPos.y = boxY + 130;
+        sigPos.x = 360;
+        sigPos.y = boxY + 130;
+        updateDocInfoDisplay();
         renderMain();
       };
     }
@@ -1496,17 +1562,25 @@
       img.src = offCanvas.toDataURL();
       img.onload = () => {
         currentDocImage = img;
+        updateDocInfoDisplay();
         updateStampCache();
         createDemoHandwrittenSignature();
         renderMain();
       };
     }
 
+    function updateDocInfoDisplay() {
+      const el = document.getElementById('docDimensionsVal');
+      if (el) {
+        el.innerText = `${canvas.width} × ${canvas.height} px`;
+      }
+    }
+
     function resetPositions() {
-      stampPos.x = 760;
-      stampPos.y = 1250;
-      sigPos.x = 420;
-      sigPos.y = 1260;
+      stampPos.x = Math.round(canvas.width * 0.72);
+      stampPos.y = Math.round(canvas.height * 0.75);
+      sigPos.x = Math.round(canvas.width * 0.40);
+      sigPos.y = Math.round(canvas.height * 0.76);
       const targetPosEl = document.getElementById('targetPosVal');
       if (targetPosEl) targetPosEl.innerText = `图章与签名已一键归位`;
       renderMain();
