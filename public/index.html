@@ -1512,7 +1512,7 @@
       renderMain();
     }
 
-    function exportDocument() {
+    async function exportDocument() {
       // 1. 导出前静默执行一次无 UI 虚线框的纯净画面渲染
       renderMain(true);
 
@@ -1520,15 +1520,61 @@
       const now = new Date();
       const pad = n => String(n).padStart(2, '0');
       const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const defaultFileName = `approved_signed_doc_${timestamp}.png`;
+      const dataUrl = canvas.toDataURL('image/png', 1.0);
 
-      // 3. 截取干净的高清图片并下载
-      const link = document.createElement('a');
-      link.download = `approved_signed_doc_${timestamp}.png`;
-      link.href = canvas.toDataURL('image/png', 1.0);
-      link.click();
+      // 3. 优先检测桌面客户端原生 API (pywebview)
+      if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.save_image === 'function') {
+        try {
+          const res = await window.pywebview.api.save_image(dataUrl, defaultFileName);
+          if (res && res.success) {
+            alert(`✅ 导出成功！\n文件已保存至：\n${res.path}`);
+          } else if (res && res.cancelled) {
+            // 用户点击了取消保存，无需多余报错
+          } else if (res && res.error) {
+            alert(`❌ 导出失败：${res.error}`);
+          }
+        } catch (e) {
+          console.error('Native save error:', e);
+          fallbackWebDownload(defaultFileName);
+        }
+      } else {
+        // 4. 浏览器 Web 端下载方案（采用标准 Blob 机制，保障大图导出稳定性）
+        fallbackWebDownload(defaultFileName);
+      }
 
-      // 4. 恢复屏幕上的交互高亮提示框
+      // 5. 恢复屏幕上的交互高亮提示框
       renderMain(false);
+    }
+
+    function fallbackWebDownload(defaultFileName) {
+      if (canvas.toBlob) {
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            alert('导出图片数据生成失败');
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.download = defaultFileName;
+          link.href = url;
+          document.body.appendChild(link);
+          link.click();
+          setTimeout(() => {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          }, 1000);
+        }, 'image/png');
+      } else {
+        const link = document.createElement('a');
+        link.download = defaultFileName;
+        link.href = canvas.toDataURL('image/png', 1.0);
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          document.body.removeChild(link);
+        }, 1000);
+      }
     }
 
     // 控件事件绑定
