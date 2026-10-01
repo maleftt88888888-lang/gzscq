@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智能图片文字替换大师 - 保持原图字体与排版一致</title>
+  <!-- Tailwind CSS & Lucide Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=Noto+Serif+SC:wght@400;700&family=Roboto:wght@400;700&family=Montserrat:wght@400;700;900&family=Impact&display=swap');
+    
+    /* 常用字体族预设 */
+    .font-yahei { font-family: "Microsoft YaHei", "微软雅黑", sans-serif; }
+    .font-heiti { font-family: "SimHei", "黑体", "Noto Sans SC", sans-serif; }
+    .font-songti { font-family: "SimSun", "宋体", "Noto Serif SC", serif; }
+    .font-kaiti { font-family: "KaiTi", "楷体", "STKaiti", serif; }
+    .font-fangsong { font-family: "FangSong", "仿宋", "STFangsong", serif; }
+    .font-youyuan { font-family: "YouYuan", "幼圆", sans-serif; }
+
+    /* 棋盘透明背景 */
+    .checkerboard {
+      background-color: #1e293b;
+      background-image: 
+        linear-gradient(45deg, #182234 25%, transparent 25%), 
+        linear-gradient(-45deg, #182234 25%, transparent 25%), 
+        linear-gradient(45deg, transparent 75%, #182234 75%), 
+        linear-gradient(-45deg, transparent 75%, #182234 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    }
+
+    /* 滚动条定制 */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+    .canvas-container {
+      position: relative;
+      touch-action: none;
+      user-select: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col h-screen overflow-hidden font-sans select-none">
+
+  <!-- 顶部导航栏 -->
+  <header class="h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 z-20 flex-shrink-0 shadow-md">
+    <div class="flex items-center space-x-3">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+        <i data-lucide="type" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <h1 class="text-sm font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">智能图片改字神器</h1>
+        <p class="text-[10px] text-slate-400">自动消除原文字 · 提取原图字色与字号 · 保持排版一致</p>
+      </div>
+    </div>
+
+    <!-- 工具箱快捷按钮 -->
+    <div class="flex items-center bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 space-x-1">
+      <button id="tool-select" onclick="setTool('select')" class="tool-btn px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 bg-indigo-600 text-white font-medium transition shadow-sm" title="框选文字区域 (快捷键: V)">
+        <i data-lucide="crop" class="w-4 h-4"></i>
+        <span>框选文字</span>
+      </button>
+      <button id="tool-brush" onclick="setTool('brush')" class="tool-btn px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 text-slate-300 hover:text-white hover:bg-slate-700 transition" title="涂抹擦除/修复背景 (快捷键: B)">
+        <i data-lucide="brush" class="w-4 h-4"></i>
+        <span>涂抹消除</span>
+      </button>
+      <button id="tool-pipette" onclick="setTool('pipette')" class="tool-btn px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 text-slate-300 hover:text-white hover:bg-slate-700 transition" title="吸管吸色 (快捷键: I)">
+        <i data-lucide="pipette" class="w-4 h-4"></i>
+        <span>吸管吸色</span>
+      </button>
+      <div class="h-4 w-[1px] bg-slate-700 mx-1"></div>
+      <button id="tool-pan" onclick="setTool('pan')" class="tool-btn px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 text-slate-300 hover:text-white hover:bg-slate-700 transition" title="抓手平移画布 (快捷键: 空格或H)">
+        <i data-lucide="hand" class="w-4 h-4"></i>
+        <span>平移</span>
+      </button>
+    </div>
+
+    <!-- 导入 / 导出 / 对比操作 -->
+    <div class="flex items-center space-x-2">
+      <label class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium cursor-pointer flex items-center space-x-1.5 transition">
+        <i data-lucide="upload" class="w-4 h-4 text-indigo-400"></i>
+        <span>更换图片</span>
+        <input type="file" id="imageInput" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+      </label>
+
+      <button id="btn-compare" class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium flex items-center space-x-1.5 transition active:scale-95" title="按住查看原图" onmousedown="showOriginal(true)" onmouseup="showOriginal(false)" onmouseleave="showOriginal(false)" ontouchstart="showOriginal(true)" ontouchend="showOriginal(false)">
+        <i data-lucide="eye" class="w-4 h-4 text-emerald-400"></i>
+        <span>按住对比原图</span>
+      </button>
+
+      <button onclick="exportResult()" class="px-4 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-semibold shadow-lg shadow-emerald-900/40 flex items-center space-x-1.5 transition active:scale-95">
+        <i data-lucide="download" class="w-4 h-4"></i>
+        <span>导出高清图</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 主界面布局 -->
+  <div class="flex flex-1 overflow-hidden relative">
+
+    <!-- 左侧快捷预设/图层列表 -->
+    <aside class="w-64 bg-slate-900/95 border-r border-slate-800 flex flex-col justify-between flex-shrink-0 z-10">
+      <div class="p-3 border-b border-slate-800/80 flex items-center justify-between">
+        <div class="flex items-center space-x-1.5">
+          <i data-lucide="layers" class="w-4 h-4 text-indigo-400"></i>
+          <span class="text-xs font-bold text-slate-200 tracking-wider">改字图层列表</span>
+        </div>
+        <button onclick="addNewTextLayer()" class="p-1 hover:bg-slate-800 text-slate-400 hover:text-indigo-400 rounded transition" title="新建文字图层">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- 图层列表容器 -->
+      <div id="layerList" class="flex-1 overflow-y-auto p-2 space-y-1.5 text-xs">
+        <!-- 动态生成图层项 -->
+      </div>
+
+      <!-- 底部快捷教程 & 示例图片 -->
+      <div class="p-3 border-t border-slate-800/80 bg-slate-950/40 space-y-2">
+        <div class="text-[11px] font-semibold text-slate-400 flex items-center justify-between">
+          <span>🎯 试一试示例图</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="loadSample(1)" class="p-1.5 bg-slate-800 hover:bg-slate-700/80 rounded border border-slate-700/60 text-left transition flex flex-col space-y-1">
+            <span class="text-[11px] font-medium text-slate-200">商业广告海报</span>
+            <span class="text-[9px] text-slate-400">黑体/渐变/背景修补</span>
+          </button>
+          <button onclick="loadSample(2)" class="p-1.5 bg-slate-800 hover:bg-slate-700/80 rounded border border-slate-700/60 text-left transition flex flex-col space-y-1">
+            <span class="text-[11px] font-medium text-slate-200">印章徽章与证书</span>
+            <span class="text-[9px] text-slate-400">宋体/楷体/居中排版</span>
+          </button>
+        </div>
+        <div class="text-[10px] text-slate-400 bg-slate-900/80 p-2 rounded border border-slate-800">
+          💡 <span class="text-slate-300 font-medium">使用技巧：</span>拖拽框选原图文字后，点击【智能消除并替换】，即可自动抹除旧字并按原字号字色填充！
+        </div>
+      </div>
+    </aside>
+
+    <!-- 中间画布工作区 -->
+    <main id="canvasWrapper" class="flex-1 overflow-hidden relative checkerboard flex items-center justify-center">
+      
+      <!-- 初始未上传图片时的欢迎空状态 -->
+      <div id="emptyDropzone" class="absolute inset-0 flex flex-col items-center justify-center p-6 z-10 transition-all bg-slate-950/80 backdrop-blur-sm" ondragover="event.preventDefault()" ondrop="handleDrop(event)">
+        <div class="max-w-md w-full bg-slate-900/90 border-2 border-dashed border-indigo-500/40 hover:border-indigo-400 p-8 rounded-2xl flex flex-col items-center text-center shadow-2xl transition cursor-pointer" onclick="document.getElementById('imageInput').click()">
+          <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-4 shadow-inner">
+            <i data-lucide="image-plus" class="w-8 h-8"></i>
+          </div>
+          <h3 class="text-base font-bold text-white mb-1">点击或拖拽图片到这里</h3>
+          <p class="text-xs text-slate-400 mb-4">支持 JPG, PNG, WebP, BMP 等高清图片格式</p>
+          <div class="flex items-center space-x-2 text-[11px] text-slate-400 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/50">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i>
+            <span>自动识别消除原文字 · 完美保留原图字体与排版</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 画布视口缩放与平移容器 -->
+      <div id="viewport" class="relative transition-transform duration-75">
+        <div id="canvasContainer" class="canvas-container shadow-2xl rounded border border-slate-700/40 overflow-hidden">
+          <!-- 1. 原图/底图画布 -->
+          <canvas id="baseCanvas" class="block"></canvas>
+          <!-- 2. 背景智能擦除修复层画布 -->
+          <canvas id="inpaintCanvas" class="absolute inset-0 pointer-events-none"></canvas>
+          <!-- 3. 文字重绘排版层画布 -->
+          <canvas id="textCanvas" class="absolute inset-0 pointer-events-none"></canvas>
+          <!-- 4. 交互操作层（框选、手柄、涂抹）画布 -->
+          <canvas id="interactionCanvas" class="absolute inset-0 cursor-crosshair"></canvas>
+        </div>
+      </div>
+
+      <!-- 画布底部控制浮条（缩放、适应屏幕、复位） -->
+      <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-900/90 backdrop-blur border border-slate-700/80 px-3 py-1.5 rounded-full shadow-2xl flex items-center space-x-3 text-xs z-20">
+        <button onclick="zoomCanvas(-0.1)" class="p-1 hover:text-indigo-400 text-slate-300 transition" title="缩小 (Ctrl + -)">
+          <i data-lucide="zoom-out" class="w-4 h-4"></i>
+        </button>
+        <span id="zoomLevelText" class="text-slate-300 font-mono text-[11px] w-12 text-center select-none">100%</span>
+        <button onclick="zoomCanvas(0.1)" class="p-1 hover:text-indigo-400 text-slate-300 transition" title="放大 (Ctrl + +)">
+          <i data-lucide="zoom-in" class="w-4 h-4"></i>
+        </button>
+        <div class="h-3 w-[1px] bg-slate-700"></div>
+        <button onclick="fitToScreen()" class="px-2 py-0.5 hover:text-indigo-400 text-slate-300 transition text-[11px]" title="适应屏幕窗口">适应窗口</button>
+        <button onclick="resetZoom()" class="px-2 py-0.5 hover:text-indigo-400 text-slate-300 transition text-[11px]" title="1:1 原尺寸">100%</button>
+      </div>
+    </main>
+
+    <!-- 右侧属性调整与样式控制面板 -->
+    <aside class="w-80 bg-slate-900 border-l border-slate-800 flex flex-col flex-shrink-0 z-10 overflow-y-auto">
+      <div class="p-3 border-b border-slate-800 bg-slate-900/90 sticky top-0 z-10 flex items-center justify-between">
+        <div class="flex items-center space-x-1.5">
+          <i data-lucide="sliders" class="w-4 h-4 text-indigo-400"></i>
+          <span class="text-xs font-bold text-slate-200">文字与排版属性</span>
+        </div>
+        <span id="selectedLayerBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-400">未选择文字</span>
+      </div>
+
+      <div class="p-4 space-y-4 text-xs">
+
+        <!-- 1. 新文字内容输入 -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label class="text-slate-300 font-semibold flex items-center space-x-1">
+              <span>替换后新文字</span>
+            </label>
+            <span class="text-[10px] text-slate-400">支持多行回车</span>
+          </div>
+          <textarea id="propText" rows="3" placeholder="在此输入想要替换的新文字内容..." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" oninput="updateCurrentLayerText(this.value)"></textarea>
+        </div>
+
+        <!-- 一键智能消除原字按钮 -->
+        <div class="bg-indigo-950/40 border border-indigo-500/30 p-3 rounded-xl space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-indigo-300 flex items-center space-x-1">
+              <i data-lucide="wand-2" class="w-3.5 h-3.5"></i>
+              <span>智能底图修复 (Inpainting)</span>
+            </span>
+          </div>
+          <p class="text-[10px] text-slate-400">自动消除框选区域内的原文字，智能修补平滑背景。</p>
+          <div class="flex space-x-2">
+            <button onclick="autoInpaintSelectedBox()" class="flex-1 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow transition flex items-center justify-center space-x-1">
+              <i data-lucide="eraser" class="w-3.5 h-3.5"></i>
+              <span>一键擦除原文字</span>
+            </button>
+            <button onclick="autoSampleColorAndFont()" class="py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs transition" title="从框选区域自动提取字体主色和字号">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i>
+              <span>智能取样</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. 字体选择与字体库 -->
+        <div class="space-y-2 pt-1 border-t border-slate-800">
+          <div class="flex items-center justify-between">
+            <label class="text-slate-300 font-semibold">字体家族 (Font Family)</label>
+            <label class="text-[10px] text-indigo-400 hover:underline cursor-pointer flex items-center space-x-0.5">
+              <span>+ 上传本地字体</span>
+              <input type="file" id="fontFileInput" accept=".ttf,.otf,.woff,.woff2" class="hidden" onchange="handleCustomFontUpload(event)">
+            </label>
+          </div>
+          <select id="propFontFamily" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none" onchange="updateProp('fontFamily', this.value)">
+            <optgroup label="常用中文字体 (系统/无衬线)">
+              <option value="'Microsoft YaHei', '微软雅黑', sans-serif">微软雅黑 (Microsoft YaHei)</option>
+              <option value="'Noto Sans SC', 'SimHei', '黑体', sans-serif">思源黑体 / 系统黑体</option>
+              <option value="'PingFang SC', 'Hiragino Sans GB', sans-serif">苹方 / 冬青黑体</option>
+              <option value="'YouYuan', '幼圆', sans-serif">幼圆 (YouYuan)</option>
+            </optgroup>
+            <optgroup label="常用中文衬线/手书体">
+              <option value="'SimSun', '宋体', 'Noto Serif SC', serif">宋体 (SimSun)</option>
+              <option value="'KaiTi', '楷体', 'STKaiti', serif">楷体 (KaiTi)</option>
+              <option value="'FangSong', '仿宋', 'STFangsong', serif">仿宋 (FangSong)</option>
+              <option value="'STHupo', '琥珀体', sans-serif">华文琥珀 / 粗圆</option>
+            </optgroup>
+            <optgroup label="英文经典字体">
+              <option value="'Impact', sans-serif">Impact (粗黑海报体)</option>
+              <option value="'Arial', sans-serif">Arial</option>
+              <option value="'Roboto', sans-serif">Roboto</option>
+              <option value="'Montserrat', sans-serif">Montserrat</option>
+              <option value="'Times New Roman', serif">Times New Roman</option>
+              <option value="'Courier New', monospace">Courier New</option>
+            </optgroup>
+            <optgroup id="customFontGroup" label="自定义上传字体" disabled>
+              <!-- 动态插入自定义字体 -->
+            </optgroup>
+          </select>
+        </div>
+
+        <!-- 3. 字号、字重、样式与对齐 -->
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[11px] text-slate-400 block mb-1">字号大小 (px)</label>
+            <div class="flex items-center space-x-1">
+              <input type="number" id="propFontSize" min="6" max="500" value="32" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-100" oninput="updateProp('fontSize', parseFloat(this.value))">
+            </div>
+          </div>
+          <div>
+            <label class="text-[11px] text-slate-400 block mb-1">字重粗细 (Weight)</label>
+            <select id="propFontWeight" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-200" onchange="updateProp('fontWeight', this.value)">
+              <option value="300">细体 (300)</option>
+              <option value="normal" selected>常规 (400)</option>
+              <option value="600">中粗 (600)</option>
+              <option value="bold">粗体 (700)</option>
+              <option value="900">特粗 (900)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 对齐与斜体快捷按钮 -->
+        <div class="flex items-center justify-between bg-slate-950 p-1 rounded-lg border border-slate-800">
+          <div class="flex space-x-1">
+            <button id="btn-align-left" onclick="updateProp('align', 'left')" class="p-1.5 rounded hover:bg-slate-800 text-slate-300" title="左对齐"><i data-lucide="align-left" class="w-3.5 h-3.5"></i></button>
+            <button id="btn-align-center" onclick="updateProp('align', 'center')" class="p-1.5 rounded bg-indigo-600 text-white" title="居中对齐"><i data-lucide="align-center" class="w-3.5 h-3.5"></i></button>
+            <button id="btn-align-right" onclick="updateProp('align', 'right')" class="p-1.5 rounded hover:bg-slate-800 text-slate-300" title="右对齐"><i data-lucide="align-right" class="w-3.5 h-3.5"></i></button>
+          </div>
+          <div class="h-4 w-[1px] bg-slate-800"></div>
+          <div class="flex space-x-1">
+            <button id="btn-style-italic" onclick="toggleProp('italic')" class="p-1.5 rounded hover:bg-slate-800 text-slate-300" title="倾斜"><i data-lucide="italic" class="w-3.5 h-3.5"></i></button>
+            <button id="btn-style-underline" onclick="toggleProp('underline')" class="p-1.5 rounded hover:bg-slate-800 text-slate-300" title="下划线"><i data-lucide="underline" class="w-3.5 h-3.5"></i></button>
+          </div>
+        </div>
+
+        <!-- 4. 字间距与行间距 -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between text-[11px] text-slate-400">
+            <span>字间距 (Letter Spacing)</span>
+            <span id="propLetterSpacingVal" class="font-mono text-slate-300">0px</span>
+          </div>
+          <input type="range" id="propLetterSpacing" min="-10" max="60" value="0" step="0.5" class="w-full accent-indigo-500 cursor-pointer" oninput="updateProp('letterSpacing', parseFloat(this.value)); document.getElementById('propLetterSpacingVal').innerText=this.value+'px'">
+
+          <div class="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+            <span>行间距倍数 (Line Height)</span>
+            <span id="propLineHeightVal" class="font-mono text-slate-300">1.2</span>
+          </div>
+          <input type="range" id="propLineHeight" min="0.8" max="2.5" value="1.2" step="0.05" class="w-full accent-indigo-500 cursor-pointer" oninput="updateProp('lineHeight', parseFloat(this.value)); document.getElementById('propLineHeightVal').innerText=this.value">
+        </div>
+
+        <!-- 5. 颜色、描边与阴影 (与原图融合核心) -->
+        <div class="space-y-3 pt-2 border-t border-slate-800">
+          <div class="font-semibold text-slate-300 flex items-center justify-between">
+            <span>颜色与质感融合</span>
+          </div>
+
+          <!-- 字体主色 -->
+          <div class="flex items-center justify-between bg-slate-950 p-2 rounded-lg border border-slate-800">
+            <span class="text-[11px] text-slate-300">文字颜色</span>
+            <div class="flex items-center space-x-2">
+              <input type="color" id="propColor" value="#ffffff" class="w-7 h-7 rounded border border-slate-700 bg-transparent cursor-pointer" onchange="updateProp('color', this.value)">
+              <input type="text" id="propColorHex" value="#FFFFFF" class="w-16 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[11px] font-mono text-center" oninput="updateProp('color', this.value)">
+            </div>
+          </div>
+
+          <!-- 文字描边 (Stroke) -->
+          <div class="space-y-1.5 bg-slate-950 p-2 rounded-lg border border-slate-800">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-1.5">
+                <input type="checkbox" id="propStrokeEnabled" class="rounded accent-indigo-500" onchange="updateProp('strokeEnabled', this.checked)">
+                <span class="text-[11px] text-slate-300">文字外描边</span>
+              </div>
+              <input type="color" id="propStrokeColor" value="#000000" class="w-6 h-6 rounded border border-slate-700 bg-transparent cursor-pointer" onchange="updateProp('strokeColor', this.value)">
+            </div>
+            <div class="flex items-center space-x-2 pt-1">
+              <span class="text-[10px] text-slate-400 w-12">粗细:</span>
+              <input type="range" id="propStrokeWidth" min="0.5" max="20" value="2" step="0.5" class="flex-1 accent-indigo-500" oninput="updateProp('strokeWidth', parseFloat(this.value))">
+            </div>
+          </div>
+
+          <!-- 文字投影与阴影 (Shadow) -->
+          <div class="space-y-1.5 bg-slate-950 p-2 rounded-lg border border-slate-800">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-1.5">
+                <input type="checkbox" id="propShadowEnabled" class="rounded accent-indigo-500" onchange="updateProp('shadowEnabled', this.checked)">
+                <span class="text-[11px] text-slate-300">投影 / 阴影</span>
+              </div>
+              <input type="color" id="propShadowColor" value="#000000" class="w-6 h-6 rounded border border-slate-700 bg-transparent cursor-pointer" onchange="updateProp('shadowColor', this.value)">
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-[10px] text-slate-400 pt-1">
+              <div>
+                <span>偏移 X/Y:</span>
+                <input type="number" id="propShadowOffset" value="3" class="w-full bg-slate-900 border border-slate-700 rounded px-1 py-0.5 mt-0.5 text-slate-200" oninput="updateProp('shadowOffset', parseFloat(this.value))">
+              </div>
+              <div>
+                <span>模糊半径:</span>
+                <input type="number" id="propShadowBlur" value="4" class="w-full bg-slate-900 border border-slate-700 rounded px-1 py-0.5 mt-0.5 text-slate-200" oninput="updateProp('shadowBlur', parseFloat(this.value))">
+              </div>
+            </div>
+          </div>
+
+          <!-- 质感融合 (平滑与噪点模拟，消除违和感) -->
+          <div class="space-y-2 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+            <div class="flex items-center justify-between text-[11px] text-slate-300">
+              <span>图片质感融合 (抗锐化边缘)</span>
+              <span id="propBlurVal" class="text-[10px] text-slate-400">0.2px</span>
+            </div>
+            <input type="range" id="propBlur" min="0" max="2" value="0.2" step="0.1" class="w-full accent-indigo-500" oninput="updateProp('blur', parseFloat(this.value)); document.getElementById('propBlurVal').innerText=this.value+'px'">
+            
+            <div class="flex items-center justify-between text-[11px] text-slate-300 pt-1">
+              <span>透明度 (Opacity)</span>
+              <span id="propOpacityVal" class="text-[10px] text-slate-400">100%</span>
+            </div>
+            <input type="range" id="propOpacity" min="0.1" max="1" value="1" step="0.05" class="w-full accent-indigo-500" oninput="updateProp('opacity', parseFloat(this.value)); document.getElementById('propOpacityVal').innerText=Math.round(this.value*100)+'%'">
+          </div>
+        </div>
+
+        <!-- 图层位置微调与删除 -->
+        <div class="flex space-x-2 pt-2">
+          <button onclick="deleteSelectedLayer()" class="flex-1 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 text-red-300 text-xs font-medium transition flex items-center justify-center space-x-1">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            <span>删除当前图层</span>
+          </button>
+          <button onclick="duplicateSelectedLayer()" class="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-medium transition flex items-center justify-center space-x-1">
+            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            <span>复制图层</span>
+          </button>
+        </div>
+
+      </div>
+    </aside>
+  </div>
+
+  <!-- JavaScript 核心逻辑 -->
+  <script>
+    // 全局状态管理
+    const state = {
+      image: null,
+      imageWidth: 0,
+      imageHeight: 0,
+      scale: 1,
+      panX: 0,
+      panY: 0,
+      activeTool: 'select', // 'select' | 'brush' | 'pipette' | 'pan'
+      isDragging: false,
+      isPanning: false,
+      isBrushing: false,
+      brushRadius: 15,
+      startX: 0,
+      startY: 0,
+      selectionBox: null, // { x, y, w, h }
+      activeHandle: null, // 'nw', 'ne', 'se', 'sw', 'move', 'rotate'
+      layers: [], // 文字图层数组
+      selectedLayerId: null,
+      inpaintPatches: [], // 背景抹除区域记录
+      customFonts: []
+    };
+
+    // DOM 画布元素
+    const baseCanvas = document.getElementById('baseCanvas');
+    const inpaintCanvas = document.getElementById('inpaintCanvas');
+    const textCanvas = document.getElementById('textCanvas');
+    const interactionCanvas = document.getElementById('interactionCanvas');
+
+    const baseCtx = baseCanvas.getContext('2d');
+    const inpaintCtx = inpaintCanvas.getContext('2d');
+    const textCtx = textCanvas.getContext('2d');
+    const interCtx = interactionCanvas.getContext('2d');
+
+    const viewport = document.getElementById('viewport');
+    const canvasContainer = document.getElementById('canvasContainer');
+    const emptyDropzone = document.getElementById('emptyDropzone');
+
+    // 初始化 Lucide 图标
+    lucide.createIcons();
+
+    // 切换工具
+    function setTool(tool) {
+      state.activeTool = tool;
+      document.querySelectorAll('.tool-btn').forEach(btn => {
+        btn.classList.remove('bg-indigo-600', 'text-white', 'shadow-sm');
+        btn.classList.add('text-slate-300');
+      });
+      const activeBtn = document.getElementById(`tool-${tool}`);
+      if (activeBtn) {
+        activeBtn.classList.remove('text-slate-300');
+        activeBtn.classList.add('bg-indigo-600', 'text-white', 'shadow-sm');
+      }
+
+      if (tool === 'pan') {
+        interactionCanvas.style.cursor = 'grab';
+      } else if (tool === 'brush') {
+        interactionCanvas.style.cursor = 'crosshair';
+      } else if (tool === 'pipette') {
+        interactionCanvas.style.cursor = 'crosshair';
+      } else {
+        interactionCanvas.style.cursor = 'crosshair';
+      }
+      renderInteraction();
+    }
+
+    // 图片上传处理
+    function handleImageUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      loadImageFromFile(file);
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) {
+        loadImageFromFile(file);
+      }
+    }
+
+    function loadImageFromFile(file) {
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const img = new Image();
+        img.onload = function() {
+          initImageWorkspace(img);
+        };
+        img.src = evt.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function initImageWorkspace(img) {
+      state.image = img;
+      state.imageWidth = img.width;
+      state.imageHeight = img.height;
+      state.layers = [];
+      state.selectedLayerId = null;
+      state.inpaintPatches = [];
+      state.selectionBox = null;
+
+      [baseCanvas, inpaintCanvas, textCanvas, interactionCanvas].forEach(c => {
+        c.width = img.width;
+        c.height = img.height;
+      });
+
+      // 绘制底层原图
+      baseCtx.clearRect(0, 0, img.width, img.height);
+      baseCtx.drawImage(img, 0, 0);
+
+      inpaintCtx.clearRect(0, 0, img.width, img.height);
+      textCtx.clearRect(0, 0, img.width, img.height);
+      interCtx.clearRect(0, 0, img.width, img.height);
+
+      emptyDropzone.classList.add('hidden');
+      fitToScreen();
+      renderAll();
+      updateLayerListUI();
+    }
+
+    // 缩放与平移控制
+    function zoomCanvas(delta) {
+      const newScale = Math.max(0.1, Math.min(5.0, state.scale + delta));
+      state.scale = newScale;
+      applyTransform();
+    }
+
+    function resetZoom() {
+      state.scale = 1;
+      state.panX = 0;
+      state.panY = 0;
+      applyTransform();
+    }
+
+    function fitToScreen() {
+      if (!state.image) return;
+      const wrapper = document.getElementById('canvasWrapper');
+      const wRatio = (wrapper.clientWidth - 80) / state.imageWidth;
+      const hRatio = (wrapper.clientHeight - 80) / state.imageHeight;
+      state.scale = Math.max(0.1, Math.min(1.0, Math.min(wRatio, hRatio)));
+      state.panX = 0;
+      state.panY = 0;
+      applyTransform();
+    }
+
+    function applyTransform() {
+      viewport.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.scale})`;
+      document.getElementById('zoomLevelText').innerText = `${Math.round(state.scale * 100)}%`;
+    }
+
+    // 键盘快捷键监听
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'v' || e.key === 'V') setTool('select');
+      if (e.key === 'b' || e.key === 'B') setTool('brush');
+      if (e.key === 'i' || e.key === 'I') setTool('pipette');
+      if (e.key === ' ' && state.activeTool !== 'pan') {
+        state._prevTool = state.activeTool;
+        setTool('pan');
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (state.selectedLayerId) deleteSelectedLayer();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.key === ' ' && state._prevTool) {
+        setTool(state._prevTool);
+        state._prevTool = null;
+      }
+    });
+
+    // 交互事件绑定 (Mouse & Touch)
+    interactionCanvas.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', onPointerUp);
+
+    function getCanvasCoords(e) {
+      const rect = interactionCanvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (state.imageWidth / rect.width);
+      const y = (e.clientY - rect.top) * (state.imageHeight / rect.height);
+      return { x, y };
+    }
+
+    function onPointerDown(e) {
+      if (!state.image) return;
+      const pt = getCanvasCoords(e);
+      state.startX = pt.x;
+      state.startY = pt.y;
+
+      if (state.activeTool === 'pan' || e.button === 1 || e.spaceKey) {
+        state.isPanning = true;
+        state.panStartClientX = e.clientX;
+        state.panStartClientY = e.clientY;
+        state.panStartX = state.panX;
+        state.panStartY = state.panY;
+        interactionCanvas.style.cursor = 'grabbing';
+        return;
+      }
+
+      if (state.activeTool === 'pipette') {
+        sampleColorAt(pt.x, pt.y);
+        return;
+      }
+
+      if (state.activeTool === 'brush') {
+        state.isBrushing = true;
+        applyBrushInpaint(pt.x, pt.y);
+        return;
+      }
+
+      if (state.activeTool === 'select') {
+        // 检查是否点中已选图层的调节手柄或移动框
+        const activeLayer = getSelectedLayer();
+        if (activeLayer) {
+          const handle = getHandleAt(activeLayer, pt.x, pt.y);
+          if (handle) {
+            state.activeHandle = handle;
+            state.isDragging = true;
+            state.layerInitialState = { ...activeLayer };
+            return;
+          }
+        }
+
+        // 检查是否点中其他图层
+        const clickedLayer = findLayerAt(pt.x, pt.y);
+        if (clickedLayer) {
+          selectLayer(clickedLayer.id);
+          state.activeHandle = 'move';
+          state.isDragging = true;
+          state.layerInitialState = { ...clickedLayer };
+          return;
+        }
+
+        // 否则开启新框选
+        state.isDragging = true;
+        state.activeHandle = 'newBox';
+        state.selectionBox = { x: pt.x, y: pt.y, w: 0, h: 0 };
+        selectLayer(null);
+      }
+    }
+
+    function onPointerMove(e) {
+      if (state.isPanning) {
+        state.panX = state.panStartX + (e.clientX - state.panStartClientX);
+        state.panY = state.panStartY + (e.clientY - state.panStartClientY);
+        applyTransform();
+        return;
+      }
+
+      if (!state.image) return;
+      const pt = getCanvasCoords(e);
+
+      if (state.isBrushing) {
+        applyBrushInpaint(pt.x, pt.y);
+        return;
+      }
+
+      if (state.isDragging && state.activeTool === 'select') {
+        if (state.activeHandle === 'newBox') {
+          const minX = Math.min(state.startX, pt.x);
+          const minY = Math.min(state.startY, pt.y);
+          const w = Math.abs(pt.x - state.startX);
+          const h = Math.abs(pt.y - state.startY);
+          state.selectionBox = { x: minX, y: minY, w, h };
+          renderInteraction();
+        } else if (state.activeHandle && state.selectedLayerId) {
+          const layer = getSelectedLayer();
+          const init = state.layerInitialState;
+          const dx = pt.x - state.startX;
+          const dy = pt.y - state.startY;
+
+          if (state.activeHandle === 'move') {
+            layer.x = init.x + dx;
+            layer.y = init.y + dy;
+          } else if (state.activeHandle === 'se') {
+            layer.w = Math.max(20, init.w + dx);
+            layer.h = Math.max(10, init.h + dy);
+            layer.fontSize = Math.max(8, init.fontSize * (layer.h / init.h));
+          } else if (state.activeHandle === 'nw') {
+            const newW = Math.max(20, init.w - dx);
+            const newH = Math.max(10, init.h - dy);
+            layer.x = init.x + (init.w - newW);
+            layer.y = init.y + (init.h - newH);
+            layer.w = newW;
+            layer.h = newH;
+            layer.fontSize = Math.max(8, init.fontSize * (layer.h / init.h));
+          }
+          syncLayerToUI(layer);
+          renderAll();
+        }
+      } else if (state.activeTool === 'select') {
+        // 更新鼠标手势
+        const activeLayer = getSelectedLayer();
+        if (activeLayer) {
+          const handle = getHandleAt(activeLayer, pt.x, pt.y);
+          if (handle === 'move') interactionCanvas.style.cursor = 'move';
+          else if (handle === 'se' || handle === 'nw') interactionCanvas.style.cursor = 'nwse-resize';
+          else if (handle === 'ne' || handle === 'sw') interactionCanvas.style.cursor = 'nesw-resize';
+          else interactionCanvas.style.cursor = 'crosshair';
+        }
+      }
+    }
+
+    function onPointerUp(e) {
+      if (state.isPanning) {
+        state.isPanning = false;
+        if (state.activeTool === 'pan') interactionCanvas.style.cursor = 'grab';
+      }
+      if (state.isBrushing) {
+        state.isBrushing = false;
+        renderAll();
+      }
+      if (state.isDragging) {
+        state.isDragging = false;
+        if (state.activeHandle === 'newBox' && state.selectionBox && state.selectionBox.w > 10 && state.selectionBox.h > 10) {
+          // 创建新文字图层并自动采样
+          const newLayer = createLayerFromBox(state.selectionBox);
+          state.layers.push(newLayer);
+          selectLayer(newLayer.id);
+          state.selectionBox = null;
+          autoSampleColorAndFont();
+        }
+        state.activeHandle = null;
+        renderAll();
+      }
+    }
+
+    // 智能创建文字图层
+    function createLayerFromBox(box) {
+      return {
+        id: 'layer_' + Date.now(),
+        name: '文字 ' + (state.layers.length + 1),
+        text: '修改后的文字',
+        x: box.x,
+        y: box.y,
+        w: box.w,
+        h: box.h,
+        fontFamily: "'Microsoft YaHei', '微软雅黑', sans-serif",
+        fontSize: Math.round(box.h * 0.75),
+        fontWeight: 'normal',
+        italic: false,
+        underline: false,
+        align: 'center',
+        letterSpacing: 0,
+        lineHeight: 1.2,
+        color: '#FFFFFF',
+        strokeEnabled: false,
+        strokeColor: '#000000',
+        strokeWidth: 2,
+        shadowEnabled: false,
+        shadowColor: '#000000',
+        shadowOffset: 3,
+        shadowBlur: 4,
+        blur: 0.2,
+        opacity: 1
+      };
+    }
+
+    function addNewTextLayer() {
+      if (!state.image) return;
+      const cx = state.imageWidth / 2 - 100;
+      const cy = state.imageHeight / 2 - 25;
+      const newLayer = createLayerFromBox({ x: cx, y: cy, w: 200, h: 50 });
+      state.layers.push(newLayer);
+      selectLayer(newLayer.id);
+      renderAll();
+    }
+
+    function selectLayer(id) {
+      state.selectedLayerId = id;
+      const layer = getSelectedLayer();
+      const badge = document.getElementById('selectedLayerBadge');
+      if (layer) {
+        badge.innerText = layer.name;
+        badge.classList.remove('bg-slate-800', 'text-slate-400');
+        badge.classList.add('bg-indigo-900/60', 'text-indigo-300', 'border-indigo-700/60');
+        syncLayerToUI(layer);
+      } else {
+        badge.innerText = '未选择文字';
+        badge.classList.remove('bg-indigo-900/60', 'text-indigo-300', 'border-indigo-700/60');
+        badge.classList.add('bg-slate-800', 'text-slate-400');
+      }
+      updateLayerListUI();
+      renderInteraction();
+    }
+
+    function getSelectedLayer() {
+      return state.layers.find(l => l.id === state.selectedLayerId);
+    }
+
+    function findLayerAt(x, y) {
+      for (let i = state.layers.length - 1; i >= 0; i--) {
+        const l = state.layers[i];
+        if (x >= l.x && x <= l.x + l.w && y >= l.y && y <= l.y + l.h) {
+          return l;
+        }
+      }
+      return null;
+    }
+
+    function getHandleAt(l, x, y) {
+      const pad = 8;
+      if (Math.abs(x - l.x) <= pad && Math.abs(y - l.y) <= pad) return 'nw';
+      if (Math.abs(x - (l.x + l.w)) <= pad && Math.abs(y - l.y) <= pad) return 'ne';
+      if (Math.abs(x - (l.x + l.w)) <= pad && Math.abs(y - (l.y + l.h)) <= pad) return 'se';
+      if (Math.abs(x - l.x) <= pad && Math.abs(y - (l.y + l.h)) <= pad) return 'sw';
+      if (x >= l.x && x <= l.x + l.w && y >= l.y && y <= l.y + l.h) return 'move';
+      return null;
+    }
+
+    // 属性面板双向同步
+    function syncLayerToUI(layer) {
+      document.getElementById('propText').value = layer.text;
+      document.getElementById('propFontFamily').value = layer.fontFamily;
+      document.getElementById('propFontSize').value = layer.fontSize;
+      document.getElementById('propFontWeight').value = layer.fontWeight;
+      document.getElementById('propLetterSpacing').value = layer.letterSpacing;
+      document.getElementById('propLetterSpacingVal').innerText = layer.letterSpacing + 'px';
+      document.getElementById('propLineHeight').value = layer.lineHeight;
+      document.getElementById('propLineHeightVal').innerText = layer.lineHeight;
+      document.getElementById('propColor').value = layer.color;
+      document.getElementById('propColorHex').value = layer.color.toUpperCase();
+      document.getElementById('propStrokeEnabled').checked = layer.strokeEnabled;
+      document.getElementById('propStrokeColor').value = layer.strokeColor;
+      document.getElementById('propStrokeWidth').value = layer.strokeWidth;
+      document.getElementById('propShadowEnabled').checked = layer.shadowEnabled;
+      document.getElementById('propShadowColor').value = layer.shadowColor;
+      document.getElementById('propShadowOffset').value = layer.shadowOffset;
+      document.getElementById('propShadowBlur').value = layer.shadowBlur;
+      document.getElementById('propBlur').value = layer.blur;
+      document.getElementById('propBlurVal').innerText = layer.blur + 'px';
+      document.getElementById('propOpacity').value = layer.opacity;
+      document.getElementById('propOpacityVal').innerText = Math.round(layer.opacity * 100) + '%';
+
+      // 对齐按钮状态
+      ['left', 'center', 'right'].forEach(a => {
+        const btn = document.getElementById(`btn-align-${a}`);
+        if (layer.align === a) {
+          btn.classList.add('bg-indigo-600', 'text-white');
+          btn.classList.remove('text-slate-300');
+        } else {
+          btn.classList.remove('bg-indigo-600', 'text-white');
+          btn.classList.add('text-slate-300');
+        }
+      });
+    }
+
+    function updateProp(key, value) {
+      const layer = getSelectedLayer();
+      if (!layer) return;
+      layer[key] = value;
+      if (key === 'color') document.getElementById('propColorHex').value = value.toUpperCase();
+      renderAll();
+    }
+
+    function updateCurrentLayerText(val) {
+      const layer = getSelectedLayer();
+      if (!layer) return;
+      layer.text = val;
+      renderAll();
+      updateLayerListUI();
+    }
+
+    function toggleProp(key) {
+      const layer = getSelectedLayer();
+      if (!layer) return;
+      layer[key] = !layer[key];
+      const btn = document.getElementById(`btn-style-${key}`);
+      if (btn) {
+        if (layer[key]) {
+          btn.classList.add('bg-indigo-600', 'text-white');
+        } else {
+          btn.classList.remove('bg-indigo-600', 'text-white');
+        }
+      }
+      renderAll();
+    }
+
+    function deleteSelectedLayer() {
+      if (!state.selectedLayerId) return;
+      state.layers = state.layers.filter(l => l.id !== state.selectedLayerId);
+      selectLayer(null);
+      renderAll();
+    }
+
+    function duplicateSelectedLayer() {
+      const layer = getSelectedLayer();
+      if (!layer) return;
+      const copy = { ...layer, id: 'layer_' + Date.now(), x: layer.x + 20, y: layer.y + 20, name: layer.name + ' 副本' };
+      state.layers.push(copy);
+      selectLayer(copy.id);
+      renderAll();
+    }
+
+    // 智能吸色
+    function sampleColorAt(x, y) {
+      const ix = Math.floor(Math.max(0, Math.min(state.imageWidth - 1, x)));
+      const iy = Math.floor(Math.max(0, Math.min(state.imageHeight - 1, y)));
+      const p = baseCtx.getImageData(ix, iy, 1, 1).data;
+      const hex = rgbToHex(p[0], p[1], p[2]);
+      const layer = getSelectedLayer();
+      if (layer) {
+        layer.color = hex;
+        syncLayerToUI(layer);
+        renderAll();
+      }
+      document.getElementById('propColor').value = hex;
+      document.getElementById('propColorHex').value = hex.toUpperCase();
+    }
+
+    function rgbToHex(r, g, b) {
+      return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    }
+
+    // 智能取样：分析框选区域的高频文字前景色与字号
+    function autoSampleColorAndFont() {
+      const layer = getSelectedLayer();
+      if (!layer || !state.image) return;
+
+      const bx = Math.floor(Math.max(0, layer.x));
+      const by = Math.floor(Math.max(0, layer.y));
+      const bw = Math.floor(Math.min(state.imageWidth - bx, layer.w));
+      const bh = Math.floor(Math.min(state.imageHeight - by, layer.h));
+      if (bw <= 0 || bh <= 0) return;
+
+      const imgData = baseCtx.getImageData(bx, by, bw, bh).data;
+      
+      // 统计所有像素的明度与色彩频次
+      let colorBins = {};
+      let totalR = 0, totalG = 0, totalB = 0, totalCount = 0;
+      
+      for (let i = 0; i < imgData.length; i += 16) { // 抽样
+        const r = imgData[i];
+        const g = imgData[i + 1];
+        const b = imgData[i + 2];
+        const qr = Math.round(r / 16) * 16;
+        const qg = Math.round(g / 16) * 16;
+        const qb = Math.round(b / 16) * 16;
+        const k = `${qr},${qg},${qb}`;
+        colorBins[k] = (colorBins[k] || 0) + 1;
+        totalR += r; totalG += g; totalB += b; totalCount++;
+      }
+
+      // 获取最显著的对比色作为文字主色
+      const sorted = Object.entries(colorBins).sort((a, b) => b[1] - a[1]);
+      if (sorted.length > 0) {
+        // 取第二高频或最突出颜色（避开纯底色）
+        const dominantKey = sorted.length > 1 ? sorted[1][0] : sorted[0][0];
+        const [r, g, b] = dominantKey.split(',').map(Number);
+        layer.color = rgbToHex(r, g, b);
+      }
+
+      // 调整合适字号（自适应为选框高度的 75%）
+      layer.fontSize = Math.round(bh * 0.75);
+
+      syncLayerToUI(layer);
+      renderAll();
+    }
+
+    // 智能抹除原文字 (Inpainting) - 基于边缘颜色多向梯度修补算法
+    function autoInpaintSelectedBox() {
+      const layer = getSelectedLayer();
+      if (!layer || !state.image) return;
+
+      const pad = 4; // 外扩微量像素避免文字描边残留
+      const bx = Math.floor(Math.max(0, layer.x - pad));
+      const by = Math.floor(Math.max(0, layer.y - pad));
+      const bw = Math.floor(Math.min(state.imageWidth - bx, layer.w + pad * 2));
+      const bh = Math.floor(Math.min(state.imageHeight - by, layer.h + pad * 2));
+      if (bw <= 0 || bh <= 0) return;
+
+      // 采样选框四周边缘的像素颜色（左、右、上、下边缘）
+      const topData = baseCtx.getImageData(bx, Math.max(0, by - 3), bw, 3).data;
+      const bottomData = baseCtx.getImageData(bx, Math.min(state.imageHeight - 3, by + bh), bw, 3).data;
+      const leftData = baseCtx.getImageData(Math.max(0, bx - 3), by, 3, bh).data;
+      const rightData = baseCtx.getImageData(Math.min(state.imageWidth - 3, bx + bw), by, 3, bh).data;
+
+      // 在 inpaintCanvas 上进行双线性插值平滑修补
+      const patchImg = inpaintCtx.createImageData(bw, bh);
+      const d = patchImg.data;
+
+      for (let y = 0; y < bh; y++) {
+        const vRatio = y / bh;
+        for (let x = 0; x < bw; x++) {
+          const hRatio = x / bw;
+          const idx = (y * bw + x) * 4;
+
+          // 上下边缘采样
+          const topIdx = (Math.floor(x) % bw) * 4;
+          const bottomIdx = (Math.floor(x) % bw) * 4;
+          const rV = topData[topIdx] * (1 - vRatio) + bottomData[bottomIdx] * vRatio;
+          const gV = topData[topIdx + 1] * (1 - vRatio) + bottomData[bottomIdx + 1] * vRatio;
+          const bV = topData[topIdx + 2] * (1 - vRatio) + bottomData[bottomIdx + 2] * vRatio;
+
+          // 左右边缘采样
+          const leftIdx = (Math.floor(y) % bh) * 4;
+          const rightIdx = (Math.floor(y) % bh) * 4;
+          const rH = leftData[leftIdx] * (1 - hRatio) + rightData[rightIdx] * hRatio;
+          const gH = leftData[leftIdx + 1] * (1 - hRatio) + rightData[rightIdx + 1] * hRatio;
+          const bH = leftData[leftIdx + 2] * (1 - hRatio) + rightData[rightIdx + 2] * hRatio;
+
+          // 混合上下与左右插值
+          d[idx] = (rV + rH) / 2;
+          d[idx + 1] = (gV + gH) / 2;
+          d[idx + 2] = (bV + bH) / 2;
+          d[idx + 3] = 255;
+        }
+      }
+
+      // 绘制修补补丁并应用轻微模糊
+      inpaintCtx.putImageData(patchImg, bx, by);
+      
+      // 记录抹除操作
+      state.inpaintPatches.push({ x: bx, y: by, w: bw, h: bh });
+      renderAll();
+    }
+
+    // 涂抹刷消除
+    function applyBrushInpaint(x, y) {
+      const r = state.brushRadius;
+      inpaintCtx.save();
+      inpaintCtx.beginPath();
+      inpaintCtx.arc(x, y, r, 0, Math.PI * 2);
+      
+      // 采样周边均值
+      const sample = baseCtx.getImageData(Math.max(0, x - r), Math.max(0, y - r), 1, 1).data;
+      inpaintCtx.fillStyle = `rgb(${sample[0]}, ${sample[1]}, ${sample[2]})`;
+      inpaintCtx.fill();
+      inpaintCtx.restore();
+
+      renderAll();
+    }
+
+    // 自定义字体上传
+    function handleCustomFontUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const fontName = 'CustomFont_' + Date.now();
+      const reader = new FileReader();
+      reader.onload = async function(evt) {
+        const font = new FontFace(fontName, evt.target.result);
+        await font.load();
+        document.fonts.add(font);
+        state.customFonts.push({ name: file.name.replace(/\.[^/.]+$/, ""), family: fontName });
+
+        const group = document.getElementById('customFontGroup');
+        group.removeAttribute('disabled');
+        const opt = document.createElement('option');
+        opt.value = `'${fontName}', sans-serif`;
+        opt.innerText = file.name;
+        opt.selected = true;
+        group.appendChild(opt);
+
+        updateProp('fontFamily', opt.value);
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // 渲染所有图层
+    function renderAll() {
+      if (!state.image) return;
+
+      // 1. 清空文字层
+      textCtx.clearRect(0, 0, state.imageWidth, state.imageHeight);
+
+      // 2. 依次渲染文字图层
+      state.layers.forEach(layer => {
+        renderTextLayer(layer);
+      });
+
+      // 3. 渲染交互控制层 (框选、手柄)
+      renderInteraction();
+    }
+
+    function renderTextLayer(l) {
+      textCtx.save();
+      textCtx.globalAlpha = l.opacity;
+
+      if (l.blur > 0) {
+        textCtx.filter = `blur(${l.blur}px)`;
+      }
+
+      // 字体设置
+      const fontStyle = l.italic ? 'italic' : 'normal';
+      textCtx.font = `${fontStyle} ${l.fontWeight} ${l.fontSize}px ${l.fontFamily}`;
+      textCtx.textAlign = l.align;
+      textCtx.textBaseline = 'top';
+
+      // 阴影设置
+      if (l.shadowEnabled) {
+        textCtx.shadowColor = l.shadowColor;
+        textCtx.shadowOffsetX = l.shadowOffset;
+        textCtx.shadowOffsetY = l.shadowOffset;
+        textCtx.shadowBlur = l.shadowBlur;
+      } else {
+        textCtx.shadowColor = 'transparent';
+      }
+
+      // 多行文本排版与字间距
+      const lines = l.text.split('\n');
+      const lineHeightPx = l.fontSize * l.lineHeight;
+
+      lines.forEach((line, index) => {
+        let textX = l.x;
+        if (l.align === 'center') textX = l.x + l.w / 2;
+        else if (l.align === 'right') textX = l.x + l.w;
+
+        const textY = l.y + index * lineHeightPx;
+
+        // 若有字间距，则逐字绘制
+        if (l.letterSpacing !== 0 && textCtx.letterSpacing === undefined) {
+          drawSpacedText(textCtx, line, textX, textY, l);
+        } else {
+          if (textCtx.letterSpacing !== undefined) {
+            textCtx.letterSpacing = `${l.letterSpacing}px`;
+          }
+          // 描边绘制
+          if (l.strokeEnabled && l.strokeWidth > 0) {
+            textCtx.strokeStyle = l.strokeColor;
+            textCtx.lineWidth = l.strokeWidth;
+            textCtx.lineJoin = 'round';
+            textCtx.strokeText(line, textX, textY);
+          }
+          // 填充绘制
+          textCtx.fillStyle = l.color;
+          textCtx.fillText(line, textX, textY);
+        }
+      });
+
+      textCtx.restore();
+    }
+
+    // 兼容模式字间距逐字绘制
+    function drawSpacedText(ctx, text, startX, y, l) {
+      const chars = text.split('');
+      const charWidths = chars.map(c => ctx.measureText(c).width);
+      const totalWidth = charWidths.reduce((a, b) => a + b, 0) + (chars.length - 1) * l.letterSpacing;
+
+      let curX = startX;
+      if (l.align === 'center') curX = startX - totalWidth / 2;
+      else if (l.align === 'right') curX = startX - totalWidth;
+
+      ctx.textAlign = 'left';
+      chars.forEach((c, i) => {
+        if (l.strokeEnabled && l.strokeWidth > 0) {
+          ctx.strokeStyle = l.strokeColor;
+          ctx.lineWidth = l.strokeWidth;
+          ctx.strokeText(c, curX, y);
+        }
+        ctx.fillStyle = l.color;
+        ctx.fillText(c, curX, y);
+        curX += charWidths[i] + l.letterSpacing;
+      });
+    }
+
+    // 渲染交互辅助线与控制柄
+    function renderInteraction() {
+      interCtx.clearRect(0, 0, state.imageWidth, state.imageHeight);
+
+      // 1. 正在框选中的虚线框
+      if (state.selectionBox && state.activeHandle === 'newBox') {
+        const b = state.selectionBox;
+        interCtx.strokeStyle = '#6366f1';
+        interCtx.lineWidth = 2 / state.scale;
+        interCtx.setLineDash([4 / state.scale, 4 / state.scale]);
+        interCtx.strokeRect(b.x, b.y, b.w, b.h);
+        interCtx.fillStyle = 'rgba(99, 102, 241, 0.15)';
+        interCtx.fillRect(b.x, b.y, b.w, b.h);
+        interCtx.setLineDash([]);
+      }
+
+      // 2. 已选中的图层线框与控制点
+      const layer = getSelectedLayer();
+      if (layer) {
+        interCtx.strokeStyle = '#38bdf8';
+        interCtx.lineWidth = 1.5 / state.scale;
+        interCtx.strokeRect(layer.x, layer.y, layer.w, layer.h);
+
+        // 绘制 4 个角落的拖动手柄
+        const hSize = 8 / state.scale;
+        interCtx.fillStyle = '#ffffff';
+        interCtx.strokeStyle = '#0284c7';
+        interCtx.lineWidth = 2 / state.scale;
+
+        const handles = [
+          { x: layer.x, y: layer.y },
+          { x: layer.x + layer.w, y: layer.y },
+          { x: layer.x + layer.w, y: layer.y + layer.h },
+          { x: layer.x, y: layer.y + layer.h }
+        ];
+
+        handles.forEach(h => {
+          interCtx.fillRect(h.x - hSize / 2, h.y - hSize / 2, hSize, hSize);
+          interCtx.strokeRect(h.x - hSize / 2, h.y - hSize / 2, hSize, hSize);
+        });
+      }
+    }
+
+    // 图层列表 UI 更新
+    function updateLayerListUI() {
+      const container = document.getElementById('layerList');
+      container.innerHTML = '';
+
+      if (state.layers.length === 0) {
+        container.innerHTML = '<div class="text-[11px] text-slate-500 text-center py-6">暂无文字图层<br>在画布上框选文字即可创建</div>';
+        return;
+      }
+
+      state.layers.forEach((layer, idx) => {
+        const isSelected = layer.id === state.selectedLayerId;
+        const div = document.createElement('div');
+        div.className = `p-2 rounded-lg cursor-pointer flex items-center justify-between border transition ${isSelected ? 'bg-indigo-950/60 border-indigo-500/80 text-white' : 'bg-slate-800/60 border-slate-700/60 text-slate-300 hover:bg-slate-800'}`;
+        div.onclick = () => selectLayer(layer.id);
+
+        div.innerHTML = `
+          <div class="flex items-center space-x-2 truncate">
+            <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${layer.color}"></span>
+            <span class="truncate font-medium text-[11px]">${layer.text || '空文字'}</span>
+          </div>
+          <div class="flex items-center space-x-1">
+            <button onclick="event.stopPropagation(); deleteLayerById('${layer.id}')" class="p-1 hover:text-red-400 text-slate-400 rounded transition" title="删除">
+              <i data-lucide="x" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+      lucide.createIcons();
+    }
+
+    function deleteLayerById(id) {
+      state.layers = state.layers.filter(l => l.id !== id);
+      if (state.selectedLayerId === id) selectLayer(null);
+      renderAll();
+    }
+
+    // 对比原图
+    function showOriginal(show) {
+      if (!state.image) return;
+      inpaintCanvas.style.opacity = show ? '0' : '1';
+      textCanvas.style.opacity = show ? '0' : '1';
+    }
+
+    // 导出合成结果
+    function exportResult() {
+      if (!state.image) {
+        alert('请先导入图片！');
+        return;
+      }
+
+      // 创建一个离屏高保真合成 Canvas
+      const offscreen = document.createElement('canvas');
+      offscreen.width = state.imageWidth;
+      offscreen.height = state.imageHeight;
+      const offCtx = offscreen.getContext('2d');
+
+      // 1. 绘制底层原图
+      offCtx.drawImage(baseCanvas, 0, 0);
+      // 2. 绘制智能修复背景层
+      offCtx.drawImage(inpaintCanvas, 0, 0);
+      // 3. 绘制文字重绘图层
+      offCtx.drawImage(textCanvas, 0, 0);
+
+      // 下载文件
+      const link = document.createElement('a');
+      link.download = `改字完成_${Date.now()}.png`;
+      link.href = offscreen.toDataURL('image/png', 1.0);
+      link.click();
+    }
+
+    // 内置示例样例
+    function loadSample(type) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      if (type === 1) {
+        // 商业海报示例
+        canvas.width = 800;
+        canvas.height = 500;
+
+        // 科技渐变背景
+        const grad = ctx.createLinearGradient(0, 0, 800, 500);
+        grad.addColorStop(0, '#0f172a');
+        grad.addColorStop(0.5, '#1e1b4b');
+        grad.addColorStop(1, '#0284c7');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 800, 500);
+
+        // 原有文字
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 42px "Microsoft YaHei", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('2026 全球人工智能大会', 400, 180);
+
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '22px "Microsoft YaHei", sans-serif';
+        ctx.fillText('探索未来科技的无限可能 · 立即报名', 400, 260);
+
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 28px "Arial", sans-serif';
+        ctx.fillText('NOV 18 - 20, SHANGHAI', 400, 330);
+      } else {
+        // 证书/徽章示例
+        canvas.width = 800;
+        canvas.height = 560;
+
+        ctx.fillStyle = '#faf8f5';
+        ctx.fillRect(0, 0, 800, 560);
+
+        // 边框花纹
+        ctx.strokeStyle = '#c2410c';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(30, 30, 740, 500);
+        ctx.strokeStyle = '#f97316';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(40, 40, 720, 480);
+
+        ctx.fillStyle = '#9a3412';
+        ctx.font = 'bold 36px "SimSun", "宋体", serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('荣 誉 证 书', 400, 130);
+
+        ctx.fillStyle = '#431407';
+        ctx.font = '24px "KaiTi", "楷体", serif';
+        ctx.fillText('兹授予 张小明 同志：', 260, 220);
+        ctx.fillText('在 2026 年度技术创新评比中荣获 一等奖', 400, 280);
+      }
+
+      const img = new Image();
+      img.onload = () => initImageWorkspace(img);
+      img.src = canvas.toDataURL();
+    }
+  </script>
+</body>
+</html>
